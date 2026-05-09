@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Logs and local output
+*.log
+logs/
+output/
+results/
+runs/
+
+# Model/checkpoint artifacts
+weights/
+*.pt
+*.pth
+*.onnx
+
+# Local config/secrets
+.env
+.env.*
+
+# IDE/OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 0_UI_Process / Visual Studio build files
+0_UI_Process/Stone_Application/bin/
+0_UI_Process/Stone_Application/obj/
+0_UI_Process/Stone_Application/*.user
+0_UI_Process/Stone_Application/*.suo
+0_UI_Process/Stone_Application/*.userosscache
+0_UI_Process/Stone_Application/*.sln.docstates
