@@ -16,11 +16,6 @@ output/
 results/
 runs/
 
-# Model/checkpoint artifacts
-weights/
-*.pt
-*.pth
-*.onnx
 
 # Local config/secrets
 .env
