@@ -29,13 +29,13 @@ namespace Stone_Application.Infrastructure
 
                         Console.WriteLine("[INFO] [THREAD #1] New Thread 1 cycle...");
 
-                        lock (Common.lockModbus)
-                        {
-                            temporaryStorage = Common.modbusClient.ReadHoldingRegisters(Config.ENC_ADDR, 2);
-                            encoderFeedback = ((temporaryStorage[0] & 0xFFFF) | (temporaryStorage[1] << 16));
-                            Console.WriteLine("[INFO] [THREAD #1] [MODBUS] Modbus read...");
-                            System.Threading.Monitor.PulseAll(Common.lockModbus);
-                        }
+                        //lock (Common.lockModbus)
+                        //{
+                        //    temporaryStorage = Common.modbusClient.ReadHoldingRegisters(Config.ENC_ADDR, 2);
+                        //    encoderFeedback = ((temporaryStorage[0] & 0xFFFF) | (temporaryStorage[1] << 16));
+                        //    Console.WriteLine("[INFO] [THREAD #1] [MODBUS] Modbus read...");
+                        //    System.Threading.Monitor.PulseAll(Common.lockModbus);
+                        //}
 
                         Console.WriteLine("[INFO] [THREAD #1] Camera capture...");
                         Common.camera.cameraCapture();

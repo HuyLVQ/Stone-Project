@@ -17,6 +17,9 @@ public sealed class AIHelper
 {
     public static void initializeAI()
     {
+
+
+
         if (Common.pythonProcess != null && !Common.pythonProcess.HasExited)
         {
             try { Common.pythonProcess.Kill(); Common.pythonProcess.WaitForExit(); }
@@ -39,6 +42,8 @@ public sealed class AIHelper
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+
+        Debug.WriteLine(Config.pythonEnvPath);
 
         Common.pythonProcess = new Process { StartInfo = psi };
 
@@ -63,6 +68,21 @@ public sealed class AIHelper
 
     public static void warmUpAI()
     {
+        // Ensure IPC resources are initialized before using Common.mmf and events.
+        Stone_Application.IPC.IPCServices.getInstance();
+
+        if (Common.mmf == null)
+        {
+            Console.WriteLine("[ERROR] IPC not initialized — MemoryMappedFile is null. Aborting warm-up.");
+            return;
+        }
+
+        if (Common.ui2aiEvent == null || Common.ai2uiEvent == null)
+        {
+            Console.WriteLine("[ERROR] IPC events not initialized. Aborting warm-up.");
+            return;
+        }
+
         using (Image originalImage = Image.FromFile(Config.TEMP_IMAGE_PATH))
         using (Bitmap originalBitMap = new Bitmap(
                                                     originalImage,

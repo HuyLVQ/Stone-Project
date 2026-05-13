@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 public static class Config
 {
     public const int EXPOSURE_TIME = 5_000;
-    public const int TIME_INTERVAL = 10_000;
+    public const int TIME_INTERVAL = 1_000;
     public const int IMAGE_WIDTH = 1_920;                           // Image width of the camera
     public const int IMAGE_HEIGHT = 1_200;                          // Image height of the camera
 
@@ -18,7 +18,7 @@ public static class Config
     public const int SENSOR_ADDR = 0;
 
     private static readonly string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-    public static readonly string RootPath = Path.GetFullPath(Path.Combine(baseDir, "..", "..", ".."));
+    public static readonly string RootPath = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", ".."));
 
     public static readonly string pythonEnvPath = Path.Combine(RootPath, "1_AI_Process", ".venv", "Scripts", "python.exe");
     public static readonly string pythonScriptPath = Path.Combine(RootPath, "1_AI_Process", "src", "main.py");

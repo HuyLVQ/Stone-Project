@@ -1,14 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 using Basler.Pylon;
 
 namespace Stone_Application.CameraClass
-{   
+{
     public class BaslerCamera
     {
         private static BaslerCamera instance;
@@ -69,11 +63,24 @@ namespace Stone_Application.CameraClass
                     this.converter.OutputPixelFormat = PixelType.BGR8packed;
 
                     Event.IImage imageData = new Event.IImage();
-                    converter.Convert(imageData.recvImage, result);
 
-                    Common.imageQueue.Add(imageData);
+                    try
+                    {
+                        // Ensure a buffer is allocated for the unmanaged Convert call.
+                        int payloadSize = (int)result.PayloadSize;
+                        imageData.recvImage = new byte[payloadSize];
 
-                    Console.WriteLine("[INFO] [CAMERA] Image is captured successfully");
+                        converter.Convert(imageData.recvImage, result);
+
+                        Common.imageQueue.Add(imageData);
+
+                        Console.WriteLine("[INFO] [CAMERA] Image is captured successfully");
+                    }
+                    catch (Exception ex)
+                    {
+                        // Catch interop/native exceptions and log them — avoid unhandled SEHException crashing the process.
+                        Console.WriteLine("[ERROR] [CAMERA] Convert failed: " + ex.Message);
+                    }
                 }
                 else
                 {

@@ -39,17 +39,20 @@ namespace Stone_Application.Forms
 
         public static void updateLogs(IInformation information)
         {
-            if (instance == null)
+            if (instance == null ||
+                instance.IsDisposed ||
+                !instance.IsHandleCreated)
                 return;
 
-            instance.Invoke(new Action(() =>
+            instance.BeginInvoke(new Action(() =>
             {
-                string time = DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss",
+                string time = DateTime.Now.ToString(
+                    "MM/dd/yyyy HH:mm:ss",
                     new CultureInfo("en-US"));
 
                 string log =
                     "============================================================\n" +
-                    $"{"\u001b[33m"}[{time}]{"u001b[0m"}\n\n" +
+                    $"{"\u001b[33m"}[{time}]{"\u001b[0m"}\n\n" +
                     $"{"\u001b[32m"}Mi sàng :{"\u001b[0m"} {information.deltaPerctMiSang,8:F2}     %    " +
                     $"{"\u001b[32m"}1x2     :{"\u001b[0m"} {information.deltaPerct1x2,8:F2}\n" +
                     $"{"\u001b[32m"}2x4     :{"\u001b[0m"} {information.deltaPerct2x4,8:F2}    %    " +
@@ -58,8 +61,10 @@ namespace Stone_Application.Forms
                     "============================================================\n\n";
 
                 instance.textBoxLogging.AppendText(log);
+
                 instance.textBoxLogging.SelectionStart =
                     instance.textBoxLogging.TextLength;
+
                 instance.textBoxLogging.ScrollToCaret();
             }));
         }

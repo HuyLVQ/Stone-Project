@@ -1,13 +1,18 @@
 import logging
+import sys
+import os
 
-from module.SAM.SAMModel import SAMImpl
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(ROOT_DIR)
+
 from module.YOLO.src.YOLOModel import YOLOImpl
-
 from utils.IPCHelpers import IPCHelper
 
 def main():
     AIModel = YOLOImpl()
     IPCInst = IPCHelper()
+
+    print("[INFO] Begin interference", flush=True)
     
     while True:        
         retrievedImgBytes = IPCInst.taskWrite()

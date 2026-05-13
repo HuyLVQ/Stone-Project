@@ -22,7 +22,8 @@ class IPCHelper():
     
     def __init__(p_cls):
         if p_cls.m_instance is None:
-            p_cls.m_instance = super().__init__(p_cls)
+            p_cls.m_instance = p_cls
+            
             try: 
                 p_cls.m_hmap = mmap.mmap(-1, MEMORY_ALLOCATION, tagname=MMF_TAGNAME, access=mmap.ACCESS_WRITE)
                 logging.info(f"Open mmf{MMF_TAGNAME} successfully")
@@ -46,8 +47,6 @@ class IPCHelper():
                 logging.warning(f"Failed to open mmf{MMF_TAGNAME}: {e}")
                 print(f"[WARN]Failed to open mmf{MMF_TAGNAME}: {e}", flush=True)
         
-        return p_cls.m_instance
-
     
     def taskWrite(self) -> np.ndarray:
         try:
@@ -56,8 +55,10 @@ class IPCHelper():
             self.m_hmap.seek(WRITE_OFFSET)
             
             rawBytes = self.m_hmap.read(IMAGE_WIDTH * IMAGE_HEIGHT * 3)
-            imageConvert = np.frombuffer(rawBytes, dtype=np.uint8).reshape((IMAGE_WIDTH * IMAGE_HEIGHT * 3))  
-            
+            imageConvert = np.frombuffer(rawBytes,
+                                         dtype=np.uint8
+                                        ).reshape((IMAGE_HEIGHT, IMAGE_WIDTH, 3))
+                                                    
             logging.info(f"Retrieve image bytes from {MMF_TAGNAME} successfully")
             print(f"[INFO]Retrieve image bytes from {MMF_TAGNAME} successfully", flush=True)
             return imageConvert

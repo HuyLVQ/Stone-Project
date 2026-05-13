@@ -1,4 +1,5 @@
 import random
+import os
 import numpy as np
 
 from ultralytics import YOLO
@@ -13,7 +14,14 @@ from utils.config import RATIO_SCALE, TYPE_COLORS, IMAGE_HEIGHT, IMAGE_WIDTH
 
 class YOLOImpl():
     m_model = None
-    m_weightsPath = "..\\weight\\best260424.pt"
+    m_weightsPath = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "weight",
+        "best260424.pt"
+    )
+
+    m_weightsPath = os.path.abspath(m_weightsPath)
     m_clsInst = None
     
     m_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
