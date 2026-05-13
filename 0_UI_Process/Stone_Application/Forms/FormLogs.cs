@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using DocumentFormat.OpenXml.Drawing;
 using Stone_Application.Event;
 
 namespace Stone_Application.Forms
@@ -48,12 +49,12 @@ namespace Stone_Application.Forms
 
                 string log =
                     "============================================================\n" +
-                    $"[{time}]\n\n" +
-                    $"Mi sàng : {information.deltaPerctMiSang,8:F2}     %    " +
-                    $"1x2     : {information.deltaPerct1x2,8:F2}\n" +
-                    $"2x4     : {information.deltaPerct2x4,8:F2}    %    " +
-                    $"4x6     : {information.deltaPerct4x6,8:F2}\n" +
-                    //$"Total weight: {information.weight}\n" + 
+                    $"{"\u001b[33m"}[{time}]{"u001b[0m"}\n\n" +
+                    $"{"\u001b[32m"}Mi sàng :{"\u001b[0m"} {information.deltaPerctMiSang,8:F2}     %    " +
+                    $"{"\u001b[32m"}1x2     :{"\u001b[0m"} {information.deltaPerct1x2,8:F2}\n" +
+                    $"{"\u001b[32m"}2x4     :{"\u001b[0m"} {information.deltaPerct2x4,8:F2}    %    " +
+                    $"{"\u001b[32m"}4x6     :{"\u001b[0m"} {information.deltaPerct4x6,8:F2}\n" +
+                    $"{"\u001b[36m"}Total weight:{"\u001b[0m"} {information.measuredWeight}\n" +
                     "============================================================\n\n";
 
                 instance.textBoxLogging.AppendText(log);

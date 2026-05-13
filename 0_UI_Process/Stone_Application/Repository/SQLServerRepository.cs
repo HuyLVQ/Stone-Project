@@ -74,20 +74,21 @@ namespace Stone_Application.Repository
                     using (var command = this.openCommand(connection))
                     {
                         string query = @"
-                                        INSERT INTO RECORD_STORAGE (current_time, perct_misang, perct_1_2, perct_2_4, perct_4_6)
+                                        INSERT INTO RECORD_STORAGE (current_time, perct_misang, perct_1_2, perct_2_4, perct_4_6, total_weight)
                                         SELECT TOP 1 
                                             @current_time, 
                                             perct_misang + @delta_misang, 
                                             perct_1_2 + @delta_1_2, 
                                             perct_2_4 + @delta_2_4, 
-                                            perct_4_6 + @delta_4_6
+                                            perct_4_6 + @delta_4_6,
+                                            total_weight + @total_weight
                                         FROM RECORD_STORAGE 
                                         ORDER BY current_time DESC;
 
                                         IF @@ROWCOUNT = 0
                                         BEGIN
-                                            INSERT INTO RECORD_STORAGE (current_time, perct_misang, perct_1_2, perct_2_4, perct_4_6)
-                                            VALUES (@current_time, @delta_misang, @delta_1_2, @delta_2_4, @delta_4_6);
+                                            INSERT INTO RECORD_STORAGE (current_time, perct_misang, perct_1_2, perct_2_4, perct_4_6, total_weight)
+                                            VALUES (@current_time, @delta_misang, @delta_1_2, @delta_2_4, @delta_4_6, @total_weight);
                                         END";
 
                         command.CommandText = query;
@@ -96,6 +97,7 @@ namespace Stone_Application.Repository
                         command.Parameters.AddWithValue("@delta_1_2", entity.deltaPerct1x2);
                         command.Parameters.AddWithValue("@delta_2_4", entity.deltaPerct2x4);
                         command.Parameters.AddWithValue("@delta_4_6", entity.deltaPerct4x6);
+                        command.Parameters.AddWithValue("@total_weight", entity.measuredWeight);
 
                         Console.WriteLine("[INFO] [REPOSITORY] [ADD] New record has been added");
                         command.ExecuteNonQuery();
@@ -137,28 +139,31 @@ namespace Stone_Application.Repository
                         {
                             if (count == 0)
                             {
-                                result.deltaPerctMiSang = 0.0;
-                                result.deltaPerct1x2 = 0.0;
-                                result.deltaPerct2x4 = 0.0;
-                                result.deltaPerct4x6 = 0.0;
+                                result.deltaPerctMiSang = 0.0f;
+                                result.deltaPerct1x2 = 0.0f;
+                                result.deltaPerct2x4 = 0.0f;
+                                result.deltaPerct4x6 = 0.0f;
+                                result.measuredWeight = 0.0f;
 
                                 Console.WriteLine("[WARN] [REPOSITORY] Zero Count. Returning default values.");
                             } else
                             {
                                 if (read.Read())
                                 {
-                                    result.deltaPerctMiSang = read.GetDouble(read.GetOrdinal("perct_misang")) / count;
-                                    result.deltaPerct1x2 = read.GetDouble(read.GetOrdinal("perct_1_2")) / count;
-                                    result.deltaPerct2x4 = read.GetDouble(read.GetOrdinal("perct_2_4")) / count;
-                                    result.deltaPerct4x6 = read.GetDouble(read.GetOrdinal("perct_4_6")) / count;
+                                    result.deltaPerctMiSang = read.GetFloat(read.GetOrdinal("perct_misang")) / count;
+                                    result.deltaPerct1x2 = read.GetFloat(read.GetOrdinal("perct_1_2")) / count;
+                                    result.deltaPerct2x4 = read.GetFloat(read.GetOrdinal("perct_2_4")) / count;
+                                    result.deltaPerct4x6 = read.GetFloat(read.GetOrdinal("perct_4_6")) / count;
+                                    result.measuredWeight = read.GetFloat(read.GetOrdinal("total_weight")) / count;
                                     Console.WriteLine("[INFO] [REPOSITORY] [TOTAL] Some records have been retrieved.");
                                 }
                                 else
                                 {
-                                    result.deltaPerctMiSang = 0.0;
-                                    result.deltaPerct1x2 = 0.0;
-                                    result.deltaPerct2x4 = 0.0;
-                                    result.deltaPerct4x6 = 0.0;
+                                    result.deltaPerctMiSang = 0.0f;
+                                    result.deltaPerct1x2 = 0.0f;
+                                    result.deltaPerct2x4 = 0.0f;
+                                    result.deltaPerct4x6 = 0.0f;
+                                    result.measuredWeight = 0.0f;
 
                                     Console.WriteLine("[WARN] [REPOSITORY] No records found in the database. Returning default values.");
                                 }

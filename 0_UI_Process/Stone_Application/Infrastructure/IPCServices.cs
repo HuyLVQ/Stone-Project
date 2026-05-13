@@ -88,10 +88,12 @@ namespace Stone_Application.IPC
 
                 using (BinaryReader reader = new BinaryReader(stream, Encoding.UTF8, false))
                 {
-                    double delta_perct_misang = reader.ReadDouble();
-                    double delta_perct_1_2 = reader.ReadDouble();
-                    double delta_perct_2_4 = reader.ReadDouble();
-                    double delta_perct_4_6 = reader.ReadDouble();
+                    float delta_perct_misang = reader.ReadSingle();
+                    float delta_perct_1_2 = reader.ReadSingle();
+                    float delta_perct_2_4 = reader.ReadSingle();
+                    float delta_perct_4_6 = reader.ReadSingle();
+
+                    float measured_weight = reader.ReadSingle();
 
                     stream.Seek(Config.OFFSET_IMAGE, SeekOrigin.Begin);
                     byte[] image_data = reader.ReadBytes(Config.IMAGE_HEIGHT * Config.IMAGE_WIDTH * 3);
@@ -101,7 +103,8 @@ namespace Stone_Application.IPC
                         deltaPerctMiSang = delta_perct_misang,
                         deltaPerct1x2 = delta_perct_1_2,
                         deltaPerct2x4 = delta_perct_2_4,
-                        deltaPerct4x6 = delta_perct_4_6
+                        deltaPerct4x6 = delta_perct_4_6,
+                        measuredWeight = measured_weight
                     };
 
                     IImage image = new IImage

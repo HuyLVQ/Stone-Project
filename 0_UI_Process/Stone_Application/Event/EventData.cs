@@ -8,10 +8,12 @@ namespace Stone_Application.Event
 {
     public class IInformation
     {
-        public double deltaPerctMiSang { get; set; }
-        public double deltaPerct1x2 { get; set; }
-        public double deltaPerct2x4 { get; set; }
-        public double deltaPerct4x6 { get; set; }
+        public float deltaPerctMiSang { get; set; }
+        public float deltaPerct1x2 { get; set; }
+        public float deltaPerct2x4 { get; set; }
+        public float deltaPerct4x6 { get; set; }
+
+        public float measuredWeight { get; set; }
     }
 
     public class IImage

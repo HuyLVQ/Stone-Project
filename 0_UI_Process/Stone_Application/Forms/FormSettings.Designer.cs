@@ -110,7 +110,6 @@ namespace Stone_Application.Forms
             // 
             // buttonAI
             // 
-            this.buttonAI.Enabled = false;
             this.buttonAI.ForeColor = System.Drawing.SystemColors.ButtonShadow;
             this.buttonAI.Location = new System.Drawing.Point(8, 68);
             this.buttonAI.Name = "buttonAI";

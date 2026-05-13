@@ -45,7 +45,7 @@ public sealed class AIHelper
         Common.pythonProcess.OutputDataReceived += (s, outArgs) =>
         {
             if (outArgs.Data != null)
-                Console.WriteLine("[INFO] [PY] " + outArgs.Data);
+                Console.WriteLine("[PY] " + outArgs.Data);
         };
 
         Common.pythonProcess.ErrorDataReceived += (s, errArgs) =>

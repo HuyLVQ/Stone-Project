@@ -73,21 +73,31 @@ class IPCHelper():
                  p_measuredWeight: float):
         try:
             if (p_classificationCount is not None):
+                measuredMiSang = p_classificationCount.get("MiSang", 0)
                 self.m_hmap.seek(READ_OFFSET)
-                self.m_hmap.write(struct.pack('f', p_classificationCount.get("MiSang", 0)))
+                self.m_hmap.write(struct.pack('f', measuredMiSang))
                 
-                self.m_hmap.seek(READ_OFFSET + 10)
-                self.m_hmap.write(struct.pack('f', p_classificationCount.get("1x2", 0)))
+                measured1x2 = p_classificationCount.get("1x2", 0)
+                self.m_hmap.seek(READ_OFFSET + 4)
+                self.m_hmap.write(struct.pack('f', measured1x2))
             
-                self.m_hmap.seek(READ_OFFSET + 20)
-                self.m_hmap.write(struct.pack('f', p_classificationCount.get("2x4", 0)))
+                measured2x4 = p_classificationCount.get("2x4", 0)
+                self.m_hmap.seek(READ_OFFSET + 8)
+                self.m_hmap.write(struct.pack('f', measured2x4))
                 
-                self.m_hmap.seek(READ_OFFSET + 30)
-                self.m_hmap.write(struct.pack('f', p_classificationCount.get("4x6", 0)))
+                measured4x6 = p_classificationCount.get("4x6", 0)
+                self.m_hmap.seek(READ_OFFSET + 12)
+                self.m_hmap.write(struct.pack('f', measured4x6))
+                print(f"[INFO] MiSang: {measuredMiSang}   ||   1x2: {measured1x2}   ||   2x4: {measured2x4}   ||   4x6: {measured4x6}", flush=True)
             
             if (p_measuredWeight is not None):
-                self.m_hmap.seek(READ_OFFSET + 40)
+                self.m_hmap.seek(READ_OFFSET + 16)
                 self.m_hmap.write(struct.pack('f', p_measuredWeight))
+                print(f"[INFO] Measured Weight: {p_measuredWeight}", flush=True)
+            else:
+                self.m_hmap.seek(READ_OFFSET + 16)
+                self.m_hmap.write(struct.pack('f', 0))
+                print(f"[INFO] Could not measured weight", flush=True)
 
 
             if (p_imgBytes is not None):
