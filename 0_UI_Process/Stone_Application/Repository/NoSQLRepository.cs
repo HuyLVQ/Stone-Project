@@ -38,7 +38,7 @@ namespace Stone_Application.Repository
 
         void IRepository<T>.add(T entity)
         {
-            lock(_lock)
+            lock (_lock)
             {
                 if (customNoSQL.Count() > 0)
                 {
@@ -101,7 +101,7 @@ namespace Stone_Application.Repository
         {
             DateTime startTime = DateTime.Parse(start_time);
             DateTime endTime = DateTime.Parse(end_time);
-            List<IInformation> filteredRecords; 
+            List<IInformation> filteredRecords;
 
             lock (_lock)
             {
@@ -132,6 +132,40 @@ namespace Stone_Application.Repository
                 Console.WriteLine("[WARN] [REPOSITORY] Zero Count for the specified time range. Returning default values.");
             }
             return result;
+        }
+
+
+        string IRepository<T>.getStartTime()
+        {
+            lock (_lock)
+            {
+                if (customNoSQL.Count > 0)
+                {
+                    return customNoSQL.Keys.First().ToString("o");
+                }
+                else
+                {
+                    Console.WriteLine("[WARN] [REPOSITORY] No records available. Returning empty string.");
+                    return string.Empty;
+                }
+            }
+        }
+
+
+        string IRepository<T>.getLatestTime()
+        {
+            lock (_lock)
+            {
+                if (customNoSQL.Count > 0)
+                {
+                    return customNoSQL.Keys.Last().ToString("o");
+                }
+                else
+                {
+                    Console.WriteLine("[WARN] [REPOSITORY] No records available. Returning empty string.");
+                    return string.Empty;
+                }
+            }
         }
     }
 }

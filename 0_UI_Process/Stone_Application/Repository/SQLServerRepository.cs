@@ -198,5 +198,15 @@ namespace Stone_Application.Repository
         {
             return null;
         }
+
+        string IRepository<T>.getStartTime()
+        {
+            return null;
+        }
+
+        string IRepository<T>.getLatestTime()
+        {
+            return null;
+        }
     }
 }

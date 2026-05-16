@@ -3,36 +3,16 @@
   "WorkspaceRootPath": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|e:\\33_stone_project\\0_ui_process\\stone_application\\aihelpers\\aihelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:aihelpers\\aihelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|e:\\33_stone_project\\0_ui_process\\stone_application\\common\\config.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:common\\config.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|e:\\33_stone_project\\0_ui_process\\stone_application\\forms\\formsettings.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:forms\\formsettings.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|e:\\33_stone_project\\0_ui_process\\stone_application\\pdfexport\\pdfexportcs.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:pdfexport\\pdfexportcs.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|e:\\33_stone_project\\0_ui_process\\stone_application\\forms\\formlogs.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:forms\\formlogs.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|e:\\33_stone_project\\0_ui_process\\stone_application\\repository\\nosqlrepository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:repository\\nosqlrepository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|e:\\33_stone_project\\0_ui_process\\stone_application\\repository\\sqlserverrepository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:repository\\sqlserverrepository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|e:\\33_stone_project\\0_ui_process\\stone_application\\event\\eventdata.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:event\\eventdata.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|e:\\33_stone_project\\0_ui_process\\stone_application\\event\\aiprocessevent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:event\\aiprocessevent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|e:\\33_stone_project\\0_ui_process\\stone_application\\common\\config.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:common\\config.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -42,21 +22,8 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 5,
           "Children": [
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "AIHelper.cs",
-              "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\AIHelpers\\AIHelper.cs",
-              "RelativeDocumentMoniker": "AIHelpers\\AIHelper.cs",
-              "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\AIHelpers\\AIHelper.cs",
-              "RelativeToolTip": "AIHelpers\\AIHelper.cs",
-              "ViewState": "AgIAAGwAAAAAAAAAAIAwwC4AAAAlAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-12T11:51:02.529Z",
-              "EditorCaption": ""
-            },
             {
               "$type": "Bookmark",
               "Name": "ST:128:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
@@ -76,92 +43,40 @@
             {
               "$type": "Document",
               "DocumentIndex": 2,
-              "Title": "FormSettings.cs",
-              "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Forms\\FormSettings.cs",
-              "RelativeDocumentMoniker": "Forms\\FormSettings.cs",
-              "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Forms\\FormSettings.cs",
-              "RelativeToolTip": "Forms\\FormSettings.cs",
-              "ViewState": "AgIAAG4AAAAAAAAAAAAtwHkAAABCAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-12T11:48:52.868Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "NoSQLRepository.cs",
-              "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Repository\\NoSQLRepository.cs",
-              "RelativeDocumentMoniker": "Repository\\NoSQLRepository.cs",
-              "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Repository\\NoSQLRepository.cs",
-              "RelativeToolTip": "Repository\\NoSQLRepository.cs",
-              "ViewState": "AgIAAE4AAAAAAAAAAAAowG0AAAA3AAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-12T11:38:33.857Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "SQLServerRepository.cs",
-              "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Repository\\SQLServerRepository.cs",
-              "RelativeDocumentMoniker": "Repository\\SQLServerRepository.cs",
-              "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Repository\\SQLServerRepository.cs",
-              "RelativeToolTip": "Repository\\SQLServerRepository.cs",
-              "ViewState": "AgIAAKsAAAAAAAAAAAAuwLUAAAAXAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-12T11:30:18.321Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "FormLogs.cs",
-              "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Forms\\FormLogs.cs",
-              "RelativeDocumentMoniker": "Forms\\FormLogs.cs",
-              "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Forms\\FormLogs.cs",
-              "RelativeToolTip": "Forms\\FormLogs.cs",
-              "ViewState": "AgIAACwAAAAAAAAAAAAhwDMAAAA/AAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-12T11:29:24.331Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 7,
-              "Title": "AIProcessEvent.cs",
-              "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Event\\AIProcessEvent.cs",
-              "RelativeDocumentMoniker": "Event\\AIProcessEvent.cs",
-              "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Event\\AIProcessEvent.cs",
-              "RelativeToolTip": "Event\\AIProcessEvent.cs",
-              "ViewState": "AgIAABYAAAAAAAAAAAAkwCIAAABJAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-12T11:29:03.184Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "EventData.cs",
-              "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Event\\EventData.cs",
-              "RelativeDocumentMoniker": "Event\\EventData.cs",
-              "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Event\\EventData.cs",
-              "RelativeToolTip": "Event\\EventData.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAuwAgAAAAUAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-12T11:28:02.474Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 1,
               "Title": "Config.cs",
               "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Common\\Config.cs",
               "RelativeDocumentMoniker": "Common\\Config.cs",
               "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Common\\Config.cs",
               "RelativeToolTip": "Common\\Config.cs",
-              "ViewState": "AgIAAAwAAAAAAAAAAAAAwBYAAAArAAAAAAAAAA==",
+              "ViewState": "AgIAAAYAAAAAAAAAAAAMwBUAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-12T10:58:44.264Z",
+              "WhenOpened": "2026-05-16T04:08:51.019Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "PDFExportcs.cs",
+              "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\PDFExport\\PDFExportcs.cs",
+              "RelativeDocumentMoniker": "PDFExport\\PDFExportcs.cs",
+              "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\PDFExport\\PDFExportcs.cs",
+              "RelativeToolTip": "PDFExport\\PDFExportcs.cs",
+              "ViewState": "AgIAAEMAAAAAAAAAAAAYwHkAAAAZAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-16T04:02:53.497Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "FormLogs.cs",
+              "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Forms\\FormLogs.cs",
+              "RelativeDocumentMoniker": "Forms\\FormLogs.cs",
+              "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Forms\\FormLogs.cs",
+              "RelativeToolTip": "Forms\\FormLogs.cs",
+              "ViewState": "AgIAAEUAAAAAAAAAAAAiwFUAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-16T04:00:07.993Z",
               "EditorCaption": ""
             }
           ]
