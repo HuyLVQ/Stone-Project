@@ -1,4 +1,5 @@
 import random
+import os
 import numpy as np
 
 from ultralytics import YOLO
@@ -13,7 +14,14 @@ from utils.config import RATIO_SCALE, TYPE_COLORS, IMAGE_HEIGHT, IMAGE_WIDTH
 
 class YOLOImpl():
     m_model = None
-    m_weightsPath = "weights/best.pt"
+    m_weightsPath = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "weight",
+        "best260424.pt"
+    )
+
+    m_weightsPath = os.path.abspath(m_weightsPath)
     m_clsInst = None
     
     m_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -107,7 +115,7 @@ class YOLOImpl():
                         cX, cY = int(poly[0][0]), int(poly[0][1])
 
                     text = f"ID:{i} - {rockType}"
-                    cv2.putText(imgDraw, text, (cX - 20, cY), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
+                    cv2.putText(imgDraw, text, (cX - 20, cY), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (255, 255, 255), 1)
                     
                     stats.append({
                         "object_id": i,

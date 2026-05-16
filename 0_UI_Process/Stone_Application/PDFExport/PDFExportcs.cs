@@ -11,6 +11,8 @@ using System.IO;
 using DocumentFormat.OpenXml.Spreadsheet;
 using System.Globalization;
 
+using Stone_Application;
+
 namespace Stone_Application.PDFExport
 {
     public class PDFExportcs
@@ -28,8 +30,7 @@ namespace Stone_Application.PDFExport
                                       double perct2x4,
                                       double perct4x6)
         {
-            string templatePath = $"..\\PDF_Reference\\template.docx";
-            File.Copy(templatePath, outputFilePath, true);
+            File.Copy(Config.templatePath, outputFilePath, true);
 
             try
             {
@@ -46,14 +47,14 @@ namespace Stone_Application.PDFExport
                         if (text.Text.Contains("{{Loadcell_record}}"))
                             text.Text = text.Text.Replace("{{Loadcell_record}}", loadcellRecord.ToString());
 
-                        if (text.Text.Contains("{{Real_record}}"))
-                            text.Text = text.Text.Replace("{{Real_record}}", realRecord.ToString());
+                        if (text.Text.Contains("AIdudoan"))
+                            text.Text = text.Text.Replace("AIdudoan", realRecord.ToString());
 
                         if (text.Text.Contains("{{Deviation}}"))
                             text.Text = text.Text.Replace("{{Deviation}}", deviation.ToString());
 
-                        if (text.Text.Contains("{{Is_OK}}"))
-                            text.Text = text.Text.Replace("{{Is_OK}}", isOk ? "Đạt" : "Không Đạt");
+                        if (text.Text.Contains("Dathaykhongdat"))
+                            text.Text = text.Text.Replace("Dathaykhongdat", isOk ? "Đạt" : "Không đạt");
 
                         if (text.Text.Contains("{{Sign}}"))
                             text.Text = text.Text.Replace("{{Sign}}", isOk ? $"<" : $">");
@@ -77,13 +78,17 @@ namespace Stone_Application.PDFExport
 
                     values.PointCount.Val = (uint)points.Count;
 
-                    var strCache = chart.Descendants<StringCache>().First();
+                    var chartLabels = new[] { "Mi sàng", "1x2", "2x4", "4x6" };
+                    var strCache = pieSeries.Descendants<CategoryAxisData>()
+                                            .First()
+                                            .Descendants<StringCache>()
+                                            .First();
                     var strPoints = strCache.Elements<StringPoint>().ToList();
 
-                    strPoints[0].NumericValue.Text = "Mi sàng";
-                    strPoints[1].NumericValue.Text = "1x2";
-                    strPoints[2].NumericValue.Text = "2x4";
-                    strPoints[3].NumericValue.Text = "4x6";
+                    for (int i = 0; i < chartLabels.Length && i < strPoints.Count; i++)
+                    {
+                        strPoints[i].NumericValue.Text = chartLabels[i];
+                    }
 
                     chart.Save();
 
@@ -102,7 +107,18 @@ namespace Stone_Application.PDFExport
                             cells.First(c => c.CellReference == "B4").CellValue = new CellValue(perct2x4.ToString(CultureInfo.InvariantCulture));
                             cells.First(c => c.CellReference == "B5").CellValue = new CellValue(perct4x6.ToString(CultureInfo.InvariantCulture));
 
+                            var sharedStrings = spreadsheet.WorkbookPart.SharedStringTablePart.SharedStringTable;
+                            var labelCells = new[] { "A2", "A3", "A4", "A5" };
+
+                            for (int i = 0; i < chartLabels.Length; i++)
+                            {
+                                var cell = cells.First(c => c.CellReference == labelCells[i]);
+                                var sharedStringIndex = int.Parse(cell.CellValue.Text, CultureInfo.InvariantCulture);
+                                sharedStrings.Elements<SharedStringItem>().ElementAt(sharedStringIndex).Text.Text = chartLabels[i];
+                            }
+
                             sheet.Save();
+                            sharedStrings.Save();
                         }
                     }
                 }

@@ -29,12 +29,14 @@
         private void InitializeComponent()
         {
             this.groupBoxLogging = new System.Windows.Forms.GroupBox();
+            this.buttonExportPDF = new System.Windows.Forms.Button();
             this.textBoxLogging = new System.Windows.Forms.RichTextBox();
             this.groupBoxLogging.SuspendLayout();
             this.SuspendLayout();
             // 
             // groupBoxLogging
             // 
+            this.groupBoxLogging.Controls.Add(this.buttonExportPDF);
             this.groupBoxLogging.Controls.Add(this.textBoxLogging);
             this.groupBoxLogging.Font = new System.Drawing.Font("Nirmala UI", 19.8F, System.Drawing.FontStyle.Bold);
             this.groupBoxLogging.Location = new System.Drawing.Point(12, 12);
@@ -43,6 +45,17 @@
             this.groupBoxLogging.TabIndex = 0;
             this.groupBoxLogging.TabStop = false;
             this.groupBoxLogging.Text = "Logging";
+            // 
+            // buttonExportPDF
+            // 
+            this.buttonExportPDF.Font = new System.Drawing.Font("Nirmala UI", 10.8F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.buttonExportPDF.Location = new System.Drawing.Point(855, 709);
+            this.buttonExportPDF.Name = "buttonExportPDF";
+            this.buttonExportPDF.Size = new System.Drawing.Size(155, 37);
+            this.buttonExportPDF.TabIndex = 1;
+            this.buttonExportPDF.Text = "Export PDF";
+            this.buttonExportPDF.UseVisualStyleBackColor = true;
+            this.buttonExportPDF.Click += new System.EventHandler(this.buttonExportPDFClick);
             // 
             // textBoxLogging
             // 
@@ -70,5 +83,6 @@
 
         private System.Windows.Forms.GroupBox groupBoxLogging;
         public System.Windows.Forms.RichTextBox textBoxLogging;
+        private System.Windows.Forms.Button buttonExportPDF;
     }
 }

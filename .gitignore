@@ -22,6 +22,7 @@ runs/
 .env.*
 
 # IDE/OS files
+.vs/
 .vscode/
 .idea/
 .DS_Store

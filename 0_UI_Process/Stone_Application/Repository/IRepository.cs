@@ -16,5 +16,8 @@ namespace Stone_Application.Repository
 
         T get(string start_time, string end_time);
 
+        string getStartTime();
+        string getLatestTime();
+
     }
 }

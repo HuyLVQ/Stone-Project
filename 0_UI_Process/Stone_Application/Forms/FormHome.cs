@@ -25,7 +25,10 @@ namespace Stone_Application.Forms
             this.FormBorderStyle = FormBorderStyle.None;
             this.ControlBox = false;           
             this.ShowIcon = false;
-            this.ShowInTaskbar = false;        
+            this.ShowInTaskbar = false;
+
+            // Ensure the PictureBox scales the received image to fit its bounds while preserving aspect ratio.
+            this.pictureBox.SizeMode = PictureBoxSizeMode.Zoom;
         }
 
         public static void updatePictureBox(Bitmap bmp)

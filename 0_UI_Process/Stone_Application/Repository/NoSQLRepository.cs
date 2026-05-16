@@ -1,10 +1,11 @@
-﻿using System;
+﻿using Stone_Application.Event;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Stone_Application.Event;
 
 namespace Stone_Application.Repository
 {
@@ -38,7 +39,7 @@ namespace Stone_Application.Repository
 
         void IRepository<T>.add(T entity)
         {
-            lock(_lock)
+            lock (_lock)
             {
                 if (customNoSQL.Count() > 0)
                 {
@@ -46,6 +47,7 @@ namespace Stone_Application.Repository
                     entity.deltaPerct1x2 += customNoSQL.Values.Last().deltaPerct1x2;
                     entity.deltaPerct2x4 += customNoSQL.Values.Last().deltaPerct2x4;
                     entity.deltaPerct4x6 += customNoSQL.Values.Last().deltaPerct4x6;
+                    entity.measuredWeight += customNoSQL.Values.Last().measuredWeight;
                 }
 
                 customNoSQL.Add(DateTime.Now, entity);
@@ -71,14 +73,16 @@ namespace Stone_Application.Repository
                     result.deltaPerct1x2 = latestRecord.deltaPerct1x2 / customNoSQL.Count();
                     result.deltaPerct2x4 = latestRecord.deltaPerct2x4 / customNoSQL.Count();
                     result.deltaPerct4x6 = latestRecord.deltaPerct4x6 / customNoSQL.Count();
+                    result.measuredWeight = latestRecord.measuredWeight / customNoSQL.Count();
                     Console.WriteLine("[INFO] [REPOSITORY] [TOTAL] Some records have been retrieved.");
                 }
                 else
                 {
-                    result.deltaPerctMiSang = 0.0;
-                    result.deltaPerct1x2 = 0.0;
-                    result.deltaPerct2x4 = 0.0;
-                    result.deltaPerct4x6 = 0.0;
+                    result.deltaPerctMiSang = 0.0f;
+                    result.deltaPerct1x2 = 0.0f;
+                    result.deltaPerct2x4 = 0.0f;
+                    result.deltaPerct4x6 = 0.0f;
+                    result.measuredWeight = 0.0f;
                     Console.WriteLine("[WARN] [REPOSITORY] Zero Count. Returning default values.");
                 }
                 return result;
@@ -98,7 +102,7 @@ namespace Stone_Application.Repository
         {
             DateTime startTime = DateTime.Parse(start_time);
             DateTime endTime = DateTime.Parse(end_time);
-            List<IInformation> filteredRecords; 
+            List<IInformation> filteredRecords;
 
             lock (_lock)
             {
@@ -116,17 +120,53 @@ namespace Stone_Application.Repository
                 result.deltaPerct1x2 = latestRecord.deltaPerct1x2 - oldestRecord.deltaPerct1x2;
                 result.deltaPerct2x4 = latestRecord.deltaPerct2x4 - oldestRecord.deltaPerct2x4;
                 result.deltaPerct4x6 = latestRecord.deltaPerct4x6 - oldestRecord.deltaPerct4x6;
+                result.measuredWeight = latestRecord.measuredWeight - oldestRecord.measuredWeight;
                 Console.WriteLine("[INFO] [REPOSITORY] [GET] Some records have been retrieved for the specified time range.");
             }
             else
             {
-                result.deltaPerctMiSang = 0.0;
-                result.deltaPerct1x2 = 0.0;
-                result.deltaPerct2x4 = 0.0;
-                result.deltaPerct4x6 = 0.0;
+                result.deltaPerctMiSang = 0.0f;
+                result.deltaPerct1x2 = 0.0f;
+                result.deltaPerct2x4 = 0.0f;
+                result.deltaPerct4x6 = 0.0f;
+                result.measuredWeight = 0.0f;
                 Console.WriteLine("[WARN] [REPOSITORY] Zero Count for the specified time range. Returning default values.");
             }
             return result;
+        }
+
+
+        string IRepository<T>.getStartTime()
+        {
+            lock (_lock)
+            {
+                if (customNoSQL.Count > 0)
+                {
+                    return customNoSQL.Keys.First().ToString("yyyy-MM-dd__hh-mm-ss", CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    Console.WriteLine("[WARN] [REPOSITORY] No records available. Returning empty string.");
+                    return string.Empty;
+                }
+            }
+        }
+
+
+        string IRepository<T>.getLatestTime()
+        {
+            lock (_lock)
+            {
+                if (customNoSQL.Count > 0)
+                {
+                    return customNoSQL.Keys.Last().ToString("yyyy-MM-dd__hh-mm-ss", CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    Console.WriteLine("[WARN] [REPOSITORY] No records available. Returning empty string.");
+                    return string.Empty;
+                }
+            }
         }
     }
 }

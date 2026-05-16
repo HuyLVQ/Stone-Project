@@ -8,7 +8,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using DocumentFormat.OpenXml.Drawing;
 using Stone_Application.Event;
+using Stone_Application.PDFExport;
+using Stone_Application;
 
 namespace Stone_Application.Forms
 {
@@ -36,30 +39,140 @@ namespace Stone_Application.Forms
             
         }
 
+        private static void AppendColoredText(  RichTextBox box,
+                                                string text,
+                                                Color color, 
+                                                bool isBold = false)
+        {
+            box.SelectionStart = box.TextLength;
+            box.SelectionLength = 0;
+
+            box.SelectionColor = color;
+
+            if (isBold)
+            {
+                box.SelectionFont = new Font(box.Font, FontStyle.Bold);
+            }
+            else
+            {
+                box.SelectionFont = new Font(box.Font, FontStyle.Regular);
+            }
+
+            box.AppendText(text);
+
+            box.SelectionColor = box.ForeColor;
+        }
+
         public static void updateLogs(IInformation information)
         {
-            if (instance == null)
+            if (instance == null ||
+                instance.IsDisposed ||
+                !instance.IsHandleCreated)
                 return;
 
-            instance.Invoke(new Action(() =>
+            instance.BeginInvoke(new Action(() =>
             {
-                string time = DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss",
-                    new CultureInfo("en-US"));
+                string time = DateTime.Now.ToString(    "MM/dd/yyyy HH:mm:ss",
+                                                        new CultureInfo("en-US"));
 
-                string log =
-                    "============================================================\n" +
-                    $"[{time}]\n\n" +
-                    $"Mi sàng : {information.deltaPerctMiSang,8:F2}     %    " +
-                    $"1x2     : {information.deltaPerct1x2,8:F2}\n" +
-                    $"2x4     : {information.deltaPerct2x4,8:F2}    %    " +
-                    $"4x6     : {information.deltaPerct4x6,8:F2}\n" +
-                    //$"Total weight: {information.weight}\n" + 
-                    "============================================================\n\n";
+                instance.textBoxLogging.AppendText(
+                    "============================================================\n");
 
-                instance.textBoxLogging.AppendText(log);
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    $"[{time}]\n\n",
+                    Color.Goldenrod,
+                    true);
+
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    "Mi sàng : ",
+                    Color.Green,
+                    true);
+
+                instance.textBoxLogging.AppendText(
+                    $"{information.deltaPerctMiSang,8:F2}%\n");
+
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    "1x2 : ",
+                    Color.Green,
+                    true);
+
+                instance.textBoxLogging.AppendText(
+                    $"{information.deltaPerct1x2,8:F2}%\n");
+
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    "2x4 : ",
+                    Color.Green,
+                    true);
+
+                instance.textBoxLogging.AppendText(
+                    $"{information.deltaPerct2x4,8:F2}%\n");
+
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    "4x6 : ",
+                    Color.Green,
+                    true);
+
+                instance.textBoxLogging.AppendText(
+                    $"{information.deltaPerct4x6,8:F2}%\n");
+
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    "Total weight: ",
+                    Color.Cyan,
+                    true);
+
+                instance.textBoxLogging.AppendText(
+                    $"{information.measuredWeight} g\n");
+
+                instance.textBoxLogging.AppendText(
+                    "============================================================\n\n");
+
+                //instance.textBoxLogging.ScrollToCaret();
+
+                //instance.textBoxLogging.AppendText(log);
+
                 instance.textBoxLogging.SelectionStart =
                     instance.textBoxLogging.TextLength;
+
                 instance.textBoxLogging.ScrollToCaret();
+            }));
+        }
+
+        private void buttonExportPDFClick(object sender, EventArgs e)
+        {
+            string startTime = Common.repositoryInstance.getStartTime();
+            string currentTime = Common.repositoryInstance.getLatestTime();
+
+            if (startTime == null || currentTime == null)
+            {
+                MessageBox.Show("No data to export.", "Export PDF", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            string outputFile = Config.outputPath + currentTime + ".docx";
+
+            PDFExportcs.ExportFile(
+                outputFilePath: outputFile,
+                startTime: startTime,
+                totalTime: currentTime,
+                loadcellRecord: Common.repositoryInstance.getTotal().measuredWeight,
+                realRecord: 0,
+                deviation: 0,
+                isOk: false,
+                perctMisang: Common.repositoryInstance.getTotal().deltaPerctMiSang,
+                perct1x2: Common.repositoryInstance.getTotal().deltaPerct1x2,
+                perct2x4: Common.repositoryInstance.getTotal().deltaPerct2x4,
+                perct4x6: Common.repositoryInstance.getTotal().deltaPerct4x6
+            );
+
+            this.Invoke(new Action(() =>
+            {
+                MessageBox.Show("Export successful to" + outputFile, "Export PDF", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }));
         }
     }
