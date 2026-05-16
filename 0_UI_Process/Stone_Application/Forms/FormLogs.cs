@@ -37,6 +37,30 @@ namespace Stone_Application.Forms
             
         }
 
+        private static void AppendColoredText(  RichTextBox box,
+                                                string text,
+                                                Color color, 
+                                                bool isBold = false)
+        {
+            box.SelectionStart = box.TextLength;
+            box.SelectionLength = 0;
+
+            box.SelectionColor = color;
+
+            if (isBold)
+            {
+                box.SelectionFont = new Font(box.Font, FontStyle.Bold);
+            }
+            else
+            {
+                box.SelectionFont = new Font(box.Font, FontStyle.Regular);
+            }
+
+            box.AppendText(text);
+
+            box.SelectionColor = box.ForeColor;
+        }
+
         public static void updateLogs(IInformation information)
         {
             if (instance == null ||
@@ -46,21 +70,69 @@ namespace Stone_Application.Forms
 
             instance.BeginInvoke(new Action(() =>
             {
-                string time = DateTime.Now.ToString(
-                    "MM/dd/yyyy HH:mm:ss",
-                    new CultureInfo("en-US"));
+                string time = DateTime.Now.ToString(    "MM/dd/yyyy HH:mm:ss",
+                                                        new CultureInfo("en-US"));
 
-                string log =
-                    "============================================================\n" +
-                    $"{"\u001b[33m"}[{time}]{"\u001b[0m"}\n\n" +
-                    $"{"\u001b[32m"}Mi sàng :{"\u001b[0m"} {information.deltaPerctMiSang,8:F2}     %    " +
-                    $"{"\u001b[32m"}1x2     :{"\u001b[0m"} {information.deltaPerct1x2,8:F2}\n" +
-                    $"{"\u001b[32m"}2x4     :{"\u001b[0m"} {information.deltaPerct2x4,8:F2}    %    " +
-                    $"{"\u001b[32m"}4x6     :{"\u001b[0m"} {information.deltaPerct4x6,8:F2}\n" +
-                    $"{"\u001b[36m"}Total weight:{"\u001b[0m"} {information.measuredWeight}\n" +
-                    "============================================================\n\n";
+                instance.textBoxLogging.AppendText(
+                    "============================================================\n");
 
-                instance.textBoxLogging.AppendText(log);
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    $"[{time}]\n\n",
+                    Color.Goldenrod,
+                    true);
+
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    "Mi sàng : ",
+                    Color.Green,
+                    true);
+
+                instance.textBoxLogging.AppendText(
+                    $"{information.deltaPerctMiSang,8:F2}%\n");
+
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    "1x2 : ",
+                    Color.Green,
+                    true);
+
+                instance.textBoxLogging.AppendText(
+                    $"{information.deltaPerct1x2,8:F2}%\n");
+
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    "2x4 : ",
+                    Color.Green,
+                    true);
+
+                instance.textBoxLogging.AppendText(
+                    $"{information.deltaPerct2x4,8:F2}%\n");
+
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    "4x6 : ",
+                    Color.Green,
+                    true);
+
+                instance.textBoxLogging.AppendText(
+                    $"{information.deltaPerct4x6,8:F2}%\n");
+
+                AppendColoredText(
+                    instance.textBoxLogging,
+                    "Total weight: ",
+                    Color.Cyan,
+                    true);
+
+                instance.textBoxLogging.AppendText(
+                    $"{information.measuredWeight} g\n");
+
+                instance.textBoxLogging.AppendText(
+                    "============================================================\n\n");
+
+                //instance.textBoxLogging.ScrollToCaret();
+
+                //instance.textBoxLogging.AppendText(log);
 
                 instance.textBoxLogging.SelectionStart =
                     instance.textBoxLogging.TextLength;
