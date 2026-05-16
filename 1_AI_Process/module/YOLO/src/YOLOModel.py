@@ -115,7 +115,7 @@ class YOLOImpl():
                         cX, cY = int(poly[0][0]), int(poly[0][1])
 
                     text = f"ID:{i} - {rockType}"
-                    cv2.putText(imgDraw, text, (cX - 20, cY), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
+                    cv2.putText(imgDraw, text, (cX - 20, cY), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (255, 255, 255), 1)
                     
                     stats.append({
                         "object_id": i,

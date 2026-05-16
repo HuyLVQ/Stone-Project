@@ -1,10 +1,11 @@
-﻿using System;
+﻿using Stone_Application.Event;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Stone_Application.Event;
 
 namespace Stone_Application.Repository
 {
@@ -141,7 +142,7 @@ namespace Stone_Application.Repository
             {
                 if (customNoSQL.Count > 0)
                 {
-                    return customNoSQL.Keys.First().ToString("o");
+                    return customNoSQL.Keys.First().ToString("yyyy-MM-dd__hh-mm-ss", CultureInfo.InvariantCulture);
                 }
                 else
                 {
@@ -158,7 +159,7 @@ namespace Stone_Application.Repository
             {
                 if (customNoSQL.Count > 0)
                 {
-                    return customNoSQL.Keys.Last().ToString("o");
+                    return customNoSQL.Keys.Last().ToString("yyyy-MM-dd__hh-mm-ss", CultureInfo.InvariantCulture);
                 }
                 else
                 {
