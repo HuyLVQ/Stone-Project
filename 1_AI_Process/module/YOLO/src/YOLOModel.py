@@ -18,7 +18,7 @@ class YOLOImpl():
         os.path.dirname(os.path.abspath(__file__)),
         "..",
         "weight",
-        "best260424.pt"
+        "best260527.pt"
     )
 
     m_weightsPath = os.path.abspath(m_weightsPath)
@@ -86,14 +86,14 @@ class YOLOImpl():
                     widthInCM = round(widthPixel * p_ratioScale, 2)  
                     areaInCM2 = round(areaPixel * areaScale, 2)   
                     
-                    if widthInCM < 5 and lengthInCM < 10:
-                        rockType = "MiSang"
-                    elif 10 <= lengthInCM < 20:
-                        rockType = "1x2"
-                    elif 20 <= lengthInCM < 40:
-                        rockType = "2x4"
-                    elif 40 <= lengthInCM <= 60:
-                        rockType = "4x6"
+                    if widthInCM < 10 or lengthInCM < 10:
+                        rockType = "Da Mi Sang (5-10mm)"
+                    elif (lengthInCM < 20 or widthInCM < 20) and lengthInCM >= 10 and widthInCM >= 10:
+                        rockType = "Da 1x2 (10-20mm)"
+                    elif (lengthInCM < 40 or widthInCM < 40) and lengthInCM >= 20 and widthInCM >= 20:
+                        rockType = "Da 2x4 (20-40mm)"
+                    elif 40 <= lengthInCM and 40 <= widthInCM:
+                        rockType = "Da 4x6 (40-60mm)"
                     else:
                         rockType = "Khac"
                         
@@ -126,7 +126,7 @@ class YOLOImpl():
                     })
 
 
-        alpha = 0.5
+        alpha = 0.28
         cv2.addWeighted(overlay, alpha, imgDraw, 1 - alpha, 0, imgDraw)
                     
         return stats, imgDraw.tobytes(), classificationCounts
