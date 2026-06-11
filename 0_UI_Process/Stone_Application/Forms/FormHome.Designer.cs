@@ -37,9 +37,12 @@
             // groupBoxPicture
             // 
             this.groupBoxPicture.Controls.Add(this.pictureBox);
+            this.groupBoxPicture.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxPicture.Font = new System.Drawing.Font("Nirmala UI", 19.8F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.groupBoxPicture.Location = new System.Drawing.Point(12, 12);
+            this.groupBoxPicture.Margin = new System.Windows.Forms.Padding(12);
             this.groupBoxPicture.Name = "groupBoxPicture";
+            this.groupBoxPicture.Padding = new System.Windows.Forms.Padding(16);
             this.groupBoxPicture.Size = new System.Drawing.Size(1056, 776);
             this.groupBoxPicture.TabIndex = 0;
             this.groupBoxPicture.TabStop = false;
@@ -47,9 +50,9 @@
             // 
             // pictureBox
             // 
-            this.pictureBox.Location = new System.Drawing.Point(50, 75);
+            this.pictureBox.Dock = System.Windows.Forms.DockStyle.Fill;
             this.pictureBox.Name = "pictureBox";
-            this.pictureBox.Size = new System.Drawing.Size(960, 600);
+            this.pictureBox.Size = new System.Drawing.Size(1024, 714);
             this.pictureBox.TabIndex = 0;
             this.pictureBox.TabStop = false;
             // 
@@ -60,6 +63,7 @@
             this.ClientSize = new System.Drawing.Size(1080, 800);
             this.Controls.Add(this.groupBoxPicture);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
+            this.Padding = new System.Windows.Forms.Padding(12);
             this.Name = "FormHome";
             this.Text = "FormHome";
             this.groupBoxPicture.ResumeLayout(false);

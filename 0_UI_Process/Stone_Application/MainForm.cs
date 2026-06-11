@@ -6,7 +6,6 @@ using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Threading;
 using System.Windows.Forms;
 using Stone_Application.Forms;
 
@@ -17,12 +16,16 @@ namespace Stone_Application
         private FormHome formHomeInstance;
         private FormSettings formSettingsInstance;
         private FormLogs formLogsInstance;
+        private bool isDraggingWindow;
+        private Point dragCursorPoint;
+        private Point dragFormPoint;
 
 
 
         public MainForm()
         {
             InitializeComponent();
+            ConfigureWindow();
 
             this.panelLoad.Controls.Clear();
 
@@ -41,6 +44,29 @@ namespace Stone_Application
 
             this.panelLoad.Controls.Add(this.formHomeInstance);
             this.formHomeInstance.Show();
+        }
+
+        private void ConfigureWindow()
+        {
+            this.KeyPreview = true;
+            this.WindowState = FormWindowState.Maximized;
+            UpdateExpandButtonText();
+        }
+
+        private void ToggleWindowState()
+        {
+            this.WindowState = this.WindowState == FormWindowState.Maximized
+                ? FormWindowState.Normal
+                : FormWindowState.Maximized;
+
+            UpdateExpandButtonText();
+        }
+
+        private void UpdateExpandButtonText()
+        {
+            this.buttonWindowToggle.Text = this.WindowState == FormWindowState.Maximized
+                ? "Restore"
+                : "Expand";
         }
 
         private void buttonHomeClick(object sender, EventArgs e)
@@ -102,9 +128,67 @@ namespace Stone_Application
             this.buttonLog.BackColor = ColorTranslator.FromHtml("#4B164C");
             this.buttonSettings.BackColor = ColorTranslator.FromHtml("#4B164C");
 
-            //exit function
-            Thread.Sleep(2000);
             Application.Exit();
+        }
+
+        private void buttonWindowMinimizeClick(object sender, EventArgs e)
+        {
+            this.WindowState = FormWindowState.Minimized;
+        }
+
+        private void buttonWindowToggleClick(object sender, EventArgs e)
+        {
+            ToggleWindowState();
+        }
+
+        private void panelTopBarMouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left || this.WindowState == FormWindowState.Maximized)
+            {
+                return;
+            }
+
+            this.isDraggingWindow = true;
+            this.dragCursorPoint = Cursor.Position;
+            this.dragFormPoint = this.Location;
+        }
+
+        private void panelTopBarMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!this.isDraggingWindow)
+            {
+                return;
+            }
+
+            Point dragOffset = Point.Subtract(Cursor.Position, new Size(this.dragCursorPoint));
+            this.Location = Point.Add(this.dragFormPoint, new Size(dragOffset));
+        }
+
+        private void panelTopBarMouseUp(object sender, MouseEventArgs e)
+        {
+            this.isDraggingWindow = false;
+        }
+
+        private void panelTopBarDoubleClick(object sender, EventArgs e)
+        {
+            ToggleWindowState();
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            UpdateExpandButtonText();
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.F11)
+            {
+                ToggleWindowState();
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
         }
     }
 }

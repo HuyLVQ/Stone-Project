@@ -38,8 +38,10 @@
             // 
             this.groupBoxLogging.Controls.Add(this.buttonExportPDF);
             this.groupBoxLogging.Controls.Add(this.textBoxLogging);
+            this.groupBoxLogging.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxLogging.Font = new System.Drawing.Font("Nirmala UI", 19.8F, System.Drawing.FontStyle.Bold);
             this.groupBoxLogging.Location = new System.Drawing.Point(12, 12);
+            this.groupBoxLogging.Margin = new System.Windows.Forms.Padding(12);
             this.groupBoxLogging.Name = "groupBoxLogging";
             this.groupBoxLogging.Size = new System.Drawing.Size(1056, 776);
             this.groupBoxLogging.TabIndex = 0;
@@ -48,8 +50,9 @@
             // 
             // buttonExportPDF
             // 
+            this.buttonExportPDF.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.buttonExportPDF.Font = new System.Drawing.Font("Nirmala UI", 10.8F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.buttonExportPDF.Location = new System.Drawing.Point(855, 709);
+            this.buttonExportPDF.Location = new System.Drawing.Point(870, 723);
             this.buttonExportPDF.Name = "buttonExportPDF";
             this.buttonExportPDF.Size = new System.Drawing.Size(155, 37);
             this.buttonExportPDF.TabIndex = 1;
@@ -59,9 +62,12 @@
             // 
             // textBoxLogging
             // 
-            this.textBoxLogging.Location = new System.Drawing.Point(50, 75);
+            this.textBoxLogging.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.textBoxLogging.Location = new System.Drawing.Point(24, 58);
             this.textBoxLogging.Name = "textBoxLogging";
-            this.textBoxLogging.Size = new System.Drawing.Size(960, 600);
+            this.textBoxLogging.Size = new System.Drawing.Size(1001, 649);
             this.textBoxLogging.TabIndex = 0;
             this.textBoxLogging.Text = "";
             // 
@@ -72,6 +78,7 @@
             this.ClientSize = new System.Drawing.Size(1080, 800);
             this.Controls.Add(this.groupBoxLogging);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
+            this.Padding = new System.Windows.Forms.Padding(12);
             this.Name = "FormLogs";
             this.Text = "FormLogs";
             this.groupBoxLogging.ResumeLayout(false);
