@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using DocumentFormat.OpenXml.Drawing;
@@ -17,8 +18,10 @@ namespace Stone_Application.Forms
 {
     public partial class FormLogs : Form
     {
+        private const string LogComponentName = "AI_PROCESS";
         private MainForm mainForm;
         private static FormLogs instance;
+        private static long logSequence;
 
         public FormLogs(MainForm mainForm)
         {
@@ -35,14 +38,13 @@ namespace Stone_Application.Forms
             this.textBoxLogging.Clear();
             this.textBoxLogging.Font = new Font("Courier New", 11f);
             textBoxLogging.WordWrap = false;
-            textBoxLogging.ScrollBars = RichTextBoxScrollBars.Vertical;
-            
+            textBoxLogging.ScrollBars = RichTextBoxScrollBars.Both;
         }
 
-        private static void AppendColoredText(  RichTextBox box,
-                                                string text,
-                                                Color color, 
-                                                bool isBold = false)
+        private static void AppendColoredText(RichTextBox box,
+                                              string text,
+                                              Color color,
+                                              bool isBold = false)
         {
             box.SelectionStart = box.TextLength;
             box.SelectionLength = 0;
@@ -63,6 +65,38 @@ namespace Stone_Application.Forms
             box.SelectionColor = box.ForeColor;
         }
 
+        private static void AppendMetric(RichTextBox box, string metricName, string metricValue)
+        {
+            AppendColoredText(
+                box,
+                $"    {metricName,-24}",
+                Color.SteelBlue,
+                true);
+
+            box.AppendText($": {metricValue}\n");
+        }
+
+        private static void AppendLogEntry(RichTextBox box, IInformation information)
+        {
+            long eventId = Interlocked.Increment(ref logSequence);
+            string timestamp = DateTimeOffset.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffzzz", CultureInfo.InvariantCulture);
+
+            AppendColoredText(box, timestamp, Color.Goldenrod, true);
+            box.AppendText(" | ");
+            AppendColoredText(box, "INFO ", Color.ForestGreen, true);
+            box.AppendText(" | ");
+            AppendColoredText(box, $"{LogComponentName,-10}", Color.MediumPurple, true);
+            box.AppendText($" | Measurement snapshot received | event_id={eventId:D6}\n");
+
+            AppendMetric(box, "sieve.misang_pct", $"{information.deltaPerctMiSang,8:F2} %");
+            AppendMetric(box, "sieve.1x2_pct", $"{information.deltaPerct1x2,8:F2} %");
+            AppendMetric(box, "sieve.2x4_pct", $"{information.deltaPerct2x4,8:F2} %");
+            AppendMetric(box, "sieve.4x6_pct", $"{information.deltaPerct4x6,8:F2} %");
+            AppendMetric(box, "weight.total_g", $"{information.measuredWeight,8:F2}");
+
+            box.AppendText("--------------------------------------------------------------------------------\n");
+        }
+
         public static void updateLogs(IInformation information)
         {
             if (instance == null ||
@@ -72,69 +106,7 @@ namespace Stone_Application.Forms
 
             instance.BeginInvoke(new Action(() =>
             {
-                string time = DateTime.Now.ToString(    "MM/dd/yyyy HH:mm:ss",
-                                                        new CultureInfo("en-US"));
-
-                instance.textBoxLogging.AppendText(
-                    "============================================================\n");
-
-                AppendColoredText(
-                    instance.textBoxLogging,
-                    $"[{time}]\n\n",
-                    Color.Goldenrod,
-                    true);
-
-                AppendColoredText(
-                    instance.textBoxLogging,
-                    "Mi sàng : ",
-                    Color.Green,
-                    true);
-
-                instance.textBoxLogging.AppendText(
-                    $"{information.deltaPerctMiSang,8:F2}%\n");
-
-                AppendColoredText(
-                    instance.textBoxLogging,
-                    "1x2 : ",
-                    Color.Green,
-                    true);
-
-                instance.textBoxLogging.AppendText(
-                    $"{information.deltaPerct1x2,8:F2}%\n");
-
-                AppendColoredText(
-                    instance.textBoxLogging,
-                    "2x4 : ",
-                    Color.Green,
-                    true);
-
-                instance.textBoxLogging.AppendText(
-                    $"{information.deltaPerct2x4,8:F2}%\n");
-
-                AppendColoredText(
-                    instance.textBoxLogging,
-                    "4x6 : ",
-                    Color.Green,
-                    true);
-
-                instance.textBoxLogging.AppendText(
-                    $"{information.deltaPerct4x6,8:F2}%\n");
-
-                AppendColoredText(
-                    instance.textBoxLogging,
-                    "Total weight: ",
-                    Color.Cyan,
-                    true);
-
-                instance.textBoxLogging.AppendText(
-                    $"{information.measuredWeight} g\n");
-
-                instance.textBoxLogging.AppendText(
-                    "============================================================\n\n");
-
-                //instance.textBoxLogging.ScrollToCaret();
-
-                //instance.textBoxLogging.AppendText(log);
+                AppendLogEntry(instance.textBoxLogging, information);
 
                 instance.textBoxLogging.SelectionStart =
                     instance.textBoxLogging.TextLength;
