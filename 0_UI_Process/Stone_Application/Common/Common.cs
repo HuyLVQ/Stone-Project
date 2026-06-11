@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -15,10 +15,10 @@ using System.Collections.Concurrent;
 
 public static class Common
     {
-        public static readonly object lockModbus = new object();
+        public static readonly object s_lockModbus = new object();
         
 
-        public static Stopwatch stopWatchMain = new Stopwatch();
+        public static Stopwatch s_stopWatchMain = new Stopwatch();
 
 
         public static ModbusClient modbusClient { get; set; }
@@ -37,11 +37,11 @@ public static class Common
         public static EventWaitHandle ai2uiEvent { get; set; }
         
     
-        public static BlockingCollection<Stone_Application.Event.IInformation> informationQueue = new BlockingCollection<IInformation>(new ConcurrentQueue<Stone_Application.Event.IInformation>(), Config.BUFFER_BOUND);
-        public static BlockingCollection<Stone_Application.Event.IImage> imageQueue = new BlockingCollection<Stone_Application.Event.IImage>(new ConcurrentQueue<Stone_Application.Event.IImage>(), Config.BUFFER_BOUND);
+        public static BlockingCollection<Stone_Application.Event.IInformation> s_informationQueue = new BlockingCollection<IInformation>(new ConcurrentQueue<Stone_Application.Event.IInformation>(), Config.BUFFER_BOUND);
+        public static BlockingCollection<Stone_Application.Event.IImage> s_imageQueue = new BlockingCollection<Stone_Application.Event.IImage>(new ConcurrentQueue<Stone_Application.Event.IImage>(), Config.BUFFER_BOUND);
 
 
-        //public static IRepository<IInformation> repositoryInstance = SQLServerRepository<IInformation>.getIntance();
-        public static IRepository<IInformation> repositoryInstance = NoSQLRepository<IInformation>.getIntance();
+        //public static IRepository<IInformation> s_repositoryInstance = SQLServerRepository<IInformation>.getIntance();
+        public static IRepository<IInformation> s_repositoryInstance = NoSQLRepository<IInformation>.getIntance();
 
 }

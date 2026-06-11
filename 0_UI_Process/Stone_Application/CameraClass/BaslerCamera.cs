@@ -1,13 +1,13 @@
-﻿using System;
+using System;
 using Basler.Pylon;
 
 namespace Stone_Application.CameraClass
 {
     public class BaslerCamera
     {
-        private static BaslerCamera instance;
-        private Camera camera;
-        private readonly PixelDataConverter converter = new PixelDataConverter
+        private static BaslerCamera s_instance;
+        private Camera m_camera;
+        private readonly PixelDataConverter m_converter = new PixelDataConverter
         {
             OutputPixelFormat = PixelType.BGR8packed
         };
@@ -18,20 +18,20 @@ namespace Stone_Application.CameraClass
         public static BaslerCamera getInstance()
         {
 
-            if (instance == null)
+            if (s_instance == null)
             {
-                instance = new BaslerCamera();
-                instance.camera = new Camera();
+                s_instance = new BaslerCamera();
+                s_instance.m_camera = new Camera();
 
                 try
                 {
-                    instance.camera.Open();
-                    instance.camera.Parameters[PLCamera.PixelFormat].SetValue(PLCamera.PixelFormat.BGR8);
-                    instance.camera.Parameters[PLCamera.ExposureTime].SetValue(Config.EXPOSURE_TIME);
+                    s_instance.m_camera.Open();
+                    s_instance.m_camera.Parameters[PLCamera.PixelFormat].SetValue(PLCamera.PixelFormat.BGR8);
+                    s_instance.m_camera.Parameters[PLCamera.ExposureTime].SetValue(Config.EXPOSURE_TIME);
 
-                    instance.camera.Parameters[PLCamera.AcquisitionMode].SetValue(PLCamera.AcquisitionMode.Continuous);
-                    instance.camera.StreamGrabber.Start(GrabStrategy.LatestImages, GrabLoop.ProvidedByUser);
-                    instance.camera.Parameters[PLCamera.AcquisitionStart].Execute();
+                    s_instance.m_camera.Parameters[PLCamera.AcquisitionMode].SetValue(PLCamera.AcquisitionMode.Continuous);
+                    s_instance.m_camera.StreamGrabber.Start(GrabStrategy.LatestImages, GrabLoop.ProvidedByUser);
+                    s_instance.m_camera.Parameters[PLCamera.AcquisitionStart].Execute();
 
                     Console.WriteLine($"[INFO] [CAMERA] Camera initialized successfully");
                 }
@@ -40,7 +40,7 @@ namespace Stone_Application.CameraClass
                     Console.WriteLine("[ERROR] [CAMERA] Error opening camera: " + ex.Message);
                 }
             }
-            return instance;
+            return s_instance;
         }
 
         public void cameraCapture()
@@ -48,7 +48,7 @@ namespace Stone_Application.CameraClass
             IGrabResult result;
             try
             {
-                result = instance.camera.StreamGrabber.RetrieveResult(5000, TimeoutHandling.ThrowException);
+                result = s_instance.m_camera.StreamGrabber.RetrieveResult(5000, TimeoutHandling.ThrowException);
             }
             catch (Exception ex)
             {
@@ -60,7 +60,7 @@ namespace Stone_Application.CameraClass
             {
                 if (result.GrabSucceeded)
                 {
-                    this.converter.OutputPixelFormat = PixelType.BGR8packed;
+                    this.m_converter.OutputPixelFormat = PixelType.BGR8packed;
 
                     Event.IImage imageData = new Event.IImage();
 
@@ -70,9 +70,9 @@ namespace Stone_Application.CameraClass
                         int payloadSize = (int)result.PayloadSize;
                         imageData.recvImage = new byte[payloadSize];
 
-                        converter.Convert(imageData.recvImage, result);
+                        m_converter.Convert(imageData.recvImage, result);
 
-                        Common.imageQueue.Add(imageData);
+                        Common.s_imageQueue.Add(imageData);
 
                         Console.WriteLine("[INFO] [CAMERA] Image is captured successfully");
                     }
@@ -93,9 +93,9 @@ namespace Stone_Application.CameraClass
         {
             try
             {
-                instance.camera.Parameters[PLCamera.AcquisitionStop].Execute();
-                instance.camera.Close();
-                instance.camera.Dispose();
+                s_instance.m_camera.Parameters[PLCamera.AcquisitionStop].Execute();
+                s_instance.m_camera.Close();
+                s_instance.m_camera.Dispose();
                 Console.WriteLine($"[INFO] [CAMERA] Camera is closed sucessully");
             }
             catch (Exception ex)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,13 +8,13 @@ namespace Stone_Application.Repository
 {
     public interface IRepository<T>
     {
-        void add(T entity);
-        void update(T entity);
+        void add(T p_entity);
+        void update(T p_entity);
 
         T getTotal();
         void reset();
 
-        T get(string start_time, string end_time);
+        T get(string p_startTime, string p_endTime);
 
         string getStartTime();
         string getLatestTime();

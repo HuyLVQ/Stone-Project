@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -18,46 +18,46 @@ namespace Stone_Application.PDFExport
     public class PDFExportcs
     {
 
-        public static bool ExportFile(string outputFilePath,
-                                      string startTime,
-                                      string totalTime,
-                                      double loadcellRecord,
-                                      double realRecord,
-                                      double deviation,
-                                      bool isOk,
-                                      double perctMisang,
-                                      double perct1x2,
-                                      double perct2x4,
-                                      double perct4x6)
+        public static bool ExportFile(string p_outputFilePath,
+                                      string p_startTime,
+                                      string p_totalTime,
+                                      double p_loadcellRecord,
+                                      double p_realRecord,
+                                      double p_deviation,
+                                      bool p_isOk,
+                                      double p_perctMisang,
+                                      double p_perct1x2,
+                                      double p_perct2x4,
+                                      double p_perct4x6)
         {
-            File.Copy(Config.templatePath, outputFilePath, true);
+            File.Copy(Config.s_templatePath, p_outputFilePath, true);
 
             try
             {
-                using (WordprocessingDocument doc = WordprocessingDocument.Open(outputFilePath, true))
+                using (WordprocessingDocument doc = WordprocessingDocument.Open(p_outputFilePath, true))
                 {
                     foreach (var text in doc.MainDocumentPart.Document.Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>())
                     {
                         if (text.Text.Contains("{{Start_time}}"))
-                            text.Text = text.Text.Replace("{{Start_time}}", startTime);
+                            text.Text = text.Text.Replace("{{Start_time}}", p_startTime);
 
                         if (text.Text.Contains("{{Total_time}}"))
-                            text.Text = text.Text.Replace("{{Total_time}}", totalTime);
+                            text.Text = text.Text.Replace("{{Total_time}}", p_totalTime);
 
                         if (text.Text.Contains("{{Loadcell_record}}"))
-                            text.Text = text.Text.Replace("{{Loadcell_record}}", loadcellRecord.ToString());
+                            text.Text = text.Text.Replace("{{Loadcell_record}}", p_loadcellRecord.ToString());
 
                         if (text.Text.Contains("AIdudoan"))
-                            text.Text = text.Text.Replace("AIdudoan", realRecord.ToString());
+                            text.Text = text.Text.Replace("AIdudoan", p_realRecord.ToString());
 
                         if (text.Text.Contains("{{Deviation}}"))
-                            text.Text = text.Text.Replace("{{Deviation}}", deviation.ToString());
+                            text.Text = text.Text.Replace("{{Deviation}}", p_deviation.ToString());
 
                         if (text.Text.Contains("Dathaykhongdat"))
-                            text.Text = text.Text.Replace("Dathaykhongdat", isOk ? "Đạt" : "Không đạt");
+                            text.Text = text.Text.Replace("Dathaykhongdat", p_isOk ? "Đạt" : "Không đạt");
 
                         if (text.Text.Contains("{{Sign}}"))
-                            text.Text = text.Text.Replace("{{Sign}}", isOk ? $"<" : $">");
+                            text.Text = text.Text.Replace("{{Sign}}", p_isOk ? $"<" : $">");
                     }
 
 
@@ -71,10 +71,10 @@ namespace Stone_Application.PDFExport
                     var values = pieSeries.Descendants<NumberingCache>().First();
                     var points = values.Elements<NumericPoint>().ToList();
 
-                    points[0].NumericValue.Text = perctMisang.ToString(CultureInfo.InvariantCulture);
-                    points[1].NumericValue.Text = perct1x2.ToString(CultureInfo.InvariantCulture);
-                    points[2].NumericValue.Text = perct2x4.ToString(CultureInfo.InvariantCulture);
-                    points[3].NumericValue.Text = perct4x6.ToString(CultureInfo.InvariantCulture);
+                    points[0].NumericValue.Text = p_perctMisang.ToString(CultureInfo.InvariantCulture);
+                    points[1].NumericValue.Text = p_perct1x2.ToString(CultureInfo.InvariantCulture);
+                    points[2].NumericValue.Text = p_perct2x4.ToString(CultureInfo.InvariantCulture);
+                    points[3].NumericValue.Text = p_perct4x6.ToString(CultureInfo.InvariantCulture);
 
                     values.PointCount.Val = (uint)points.Count;
 
@@ -102,17 +102,17 @@ namespace Stone_Application.PDFExport
 
                             var cells = sheet.Descendants<Cell>().ToList();
 
-                            cells.First(c => c.CellReference == "B2").CellValue = new CellValue(perctMisang.ToString(CultureInfo.InvariantCulture));
-                            cells.First(c => c.CellReference == "B3").CellValue = new CellValue(perct1x2.ToString(CultureInfo.InvariantCulture));
-                            cells.First(c => c.CellReference == "B4").CellValue = new CellValue(perct2x4.ToString(CultureInfo.InvariantCulture));
-                            cells.First(c => c.CellReference == "B5").CellValue = new CellValue(perct4x6.ToString(CultureInfo.InvariantCulture));
+                            cells.First(p_c => p_c.CellReference == "B2").CellValue = new CellValue(p_perctMisang.ToString(CultureInfo.InvariantCulture));
+                            cells.First(p_c => p_c.CellReference == "B3").CellValue = new CellValue(p_perct1x2.ToString(CultureInfo.InvariantCulture));
+                            cells.First(p_c => p_c.CellReference == "B4").CellValue = new CellValue(p_perct2x4.ToString(CultureInfo.InvariantCulture));
+                            cells.First(p_c => p_c.CellReference == "B5").CellValue = new CellValue(p_perct4x6.ToString(CultureInfo.InvariantCulture));
 
                             var sharedStrings = spreadsheet.WorkbookPart.SharedStringTablePart.SharedStringTable;
                             var labelCells = new[] { "A2", "A3", "A4", "A5" };
 
                             for (int i = 0; i < chartLabels.Length; i++)
                             {
-                                var cell = cells.First(c => c.CellReference == labelCells[i]);
+                                var cell = cells.First(p_c => p_c.CellReference == labelCells[i]);
                                 var sharedStringIndex = int.Parse(cell.CellValue.Text, CultureInfo.InvariantCulture);
                                 sharedStrings.Elements<SharedStringItem>().ElementAt(sharedStringIndex).Text.Text = chartLabels[i];
                             }

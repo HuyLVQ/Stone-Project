@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,16 +10,16 @@ namespace Stone_Application.Observer
 {
     public class DBObserver<T> : IEventObserver<T> where T : IInformation
     {
-        private readonly IRepository<T> sqlServerRepository;
+        private readonly IRepository<T> m_sqlServerRepository;
 
-        public DBObserver (IRepository<T> sqlInstance)
+        public DBObserver (IRepository<T> p_sqlInstance)
         {
-            sqlServerRepository = sqlInstance;
+            m_sqlServerRepository = p_sqlInstance;
         }
 
-        public void Update(T information)
+        public void Update(T p_information)
         {
-            sqlServerRepository.add(information);
+            m_sqlServerRepository.add(p_information);
         }
     }
 }

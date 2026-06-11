@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,63 +11,63 @@ namespace Stone_Application.Event
 {
     public class AIProcessEvent
     {
-        private List<IEventObserver<IInformation>> informationObservers = new List<IEventObserver<IInformation>>();
-        private List<IEventObserver<IImage>> imageObservers = new List<IEventObserver<IImage>>();
+        private List<IEventObserver<IInformation>> m_informationObservers = new List<IEventObserver<IInformation>>();
+        private List<IEventObserver<IImage>> m_imageObservers = new List<IEventObserver<IImage>>();
 
-        private static AIProcessEvent instance;
-        private readonly IPCServices ipcService;
+        private static AIProcessEvent s_instance;
+        private readonly IPCServices m_ipcService;
 
 
-        private AIProcessEvent(IPCServices ipcServiceArg)
+        private AIProcessEvent(IPCServices p_ipcServiceArg)
         {
-            ipcService = ipcServiceArg;
+            m_ipcService = p_ipcServiceArg;
         }
 
-        public static AIProcessEvent getInstance(IPCServices ipcServiceArg)
+        public static AIProcessEvent getInstance(IPCServices p_ipcServiceArg)
         {
-            if (instance == null)
+            if (s_instance == null)
             {
-                instance = new AIProcessEvent(ipcServiceArg);
+                s_instance = new AIProcessEvent(p_ipcServiceArg);
             }
-            return instance;
+            return s_instance;
         }
 
-        public void attachInformationObserver(IEventObserver<IInformation> observer)
+        public void attachInformationObserver(IEventObserver<IInformation> p_observer)
         {
-            this.informationObservers.Add(observer);
+            this.m_informationObservers.Add(p_observer);
             Console.WriteLine("Information observer attached.");
         }
 
-        public void attachImageObserver(IEventObserver<IImage> observer)
+        public void attachImageObserver(IEventObserver<IImage> p_observer)
         {
-            this.imageObservers.Add(observer);
+            this.m_imageObservers.Add(p_observer);
             Console.WriteLine("Image observer attached.");
         }
 
-        public void detachInformationObserver(IEventObserver<IInformation> observer)
+        public void detachInformationObserver(IEventObserver<IInformation> p_observer)
         {
-            this.informationObservers.Remove(observer);
+            this.m_informationObservers.Remove(p_observer);
         }
 
-        public void detachImageObserver(IEventObserver<IImage> observer)
+        public void detachImageObserver(IEventObserver<IImage> p_observer)
         {
-            this.imageObservers.Remove(observer);
+            this.m_imageObservers.Remove(p_observer);
         }
 
 
-        public void notifyInformation(IInformation information)
+        public void notifyInformation(IInformation p_information)
         {
-            foreach (var observer in this.informationObservers)
+            foreach (var observer in this.m_informationObservers)
             {
-                observer.Update(information);
+                observer.Update(p_information);
             }
         }
 
-        public void notifyImage(IImage image)
+        public void notifyImage(IImage p_image)
         {
-            foreach (var observer in this.imageObservers)
+            foreach (var observer in this.m_imageObservers)
             {
-                observer.Update(image);
+                observer.Update(p_image);
             }
         }
 
@@ -77,7 +77,7 @@ namespace Stone_Application.Event
         {
             try
             {
-                var (information, image) = ipcService.readTask();
+                var (information, image) = m_ipcService.readTask();
 
                 if (information != null)
                     notifyInformation(information);

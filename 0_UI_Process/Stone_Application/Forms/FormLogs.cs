@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -18,16 +18,16 @@ namespace Stone_Application.Forms
 {
     public partial class FormLogs : Form
     {
-        private const string LogComponentName = "AI_PROCESS";
-        private MainForm mainForm;
-        private static FormLogs instance;
-        private static long logSequence;
+        private const string LOG_COMPONENT_NAME = "AI_PROCESS";
+        private MainForm m_mainForm;
+        private static FormLogs s_instance;
+        private static long s_logSequence;
 
-        public FormLogs(MainForm mainForm)
+        public FormLogs(MainForm p_mainForm)
         {
             InitializeComponent();
-            this.mainForm = mainForm;
-            instance = this;
+            this.m_mainForm = p_mainForm;
+            s_instance = this;
 
             this.TopLevel = false;
             this.FormBorderStyle = FormBorderStyle.None;
@@ -41,84 +41,84 @@ namespace Stone_Application.Forms
             textBoxLogging.ScrollBars = RichTextBoxScrollBars.Both;
         }
 
-        private static void AppendColoredText(RichTextBox box,
-                                              string text,
-                                              Color color,
-                                              bool isBold = false)
+        private static void AppendColoredText(RichTextBox p_box,
+                                              string p_text,
+                                              Color p_color,
+                                              bool p_isBold = false)
         {
-            box.SelectionStart = box.TextLength;
-            box.SelectionLength = 0;
+            p_box.SelectionStart = p_box.TextLength;
+            p_box.SelectionLength = 0;
 
-            box.SelectionColor = color;
+            p_box.SelectionColor = p_color;
 
-            if (isBold)
+            if (p_isBold)
             {
-                box.SelectionFont = new Font(box.Font, FontStyle.Bold);
+                p_box.SelectionFont = new Font(p_box.Font, FontStyle.Bold);
             }
             else
             {
-                box.SelectionFont = new Font(box.Font, FontStyle.Regular);
+                p_box.SelectionFont = new Font(p_box.Font, FontStyle.Regular);
             }
 
-            box.AppendText(text);
+            p_box.AppendText(p_text);
 
-            box.SelectionColor = box.ForeColor;
+            p_box.SelectionColor = p_box.ForeColor;
         }
 
-        private static void AppendMetric(RichTextBox box, string metricName, string metricValue)
+        private static void AppendMetric(RichTextBox p_box, string p_metricName, string p_metricValue)
         {
             AppendColoredText(
-                box,
-                $"    {metricName,-24}",
+                p_box,
+                $"    {p_metricName,-24}",
                 Color.SteelBlue,
                 true);
 
-            box.AppendText($": {metricValue}\n");
+            p_box.AppendText($": {p_metricValue}\n");
         }
 
-        private static void AppendLogEntry(RichTextBox box, IInformation information)
+        private static void AppendLogEntry(RichTextBox p_box, IInformation p_information)
         {
-            long eventId = Interlocked.Increment(ref logSequence);
+            long eventId = Interlocked.Increment(ref s_logSequence);
             string timestamp = DateTimeOffset.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffzzz", CultureInfo.InvariantCulture);
 
-            AppendColoredText(box, timestamp, Color.Goldenrod, true);
-            box.AppendText(" | ");
-            AppendColoredText(box, "INFO ", Color.ForestGreen, true);
-            box.AppendText(" | ");
-            AppendColoredText(box, $"{LogComponentName,-10}", Color.MediumPurple, true);
-            box.AppendText($" | Measurement snapshot received | event_id={eventId:D6}\n");
+            AppendColoredText(p_box, timestamp, Color.Goldenrod, true);
+            p_box.AppendText(" | ");
+            AppendColoredText(p_box, "INFO ", Color.ForestGreen, true);
+            p_box.AppendText(" | ");
+            AppendColoredText(p_box, $"{LOG_COMPONENT_NAME,-10}", Color.MediumPurple, true);
+            p_box.AppendText($" | Measurement snapshot received | event_id={eventId:D6}\n");
 
-            AppendMetric(box, "sieve.misang_pct", $"{information.deltaPerctMiSang,8:F2} %");
-            AppendMetric(box, "sieve.1x2_pct", $"{information.deltaPerct1x2,8:F2} %");
-            AppendMetric(box, "sieve.2x4_pct", $"{information.deltaPerct2x4,8:F2} %");
-            AppendMetric(box, "sieve.4x6_pct", $"{information.deltaPerct4x6,8:F2} %");
-            AppendMetric(box, "weight.total_g", $"{information.measuredWeight,8:F2}");
+            AppendMetric(p_box, "sieve.misang_pct", $"{p_information.deltaPerctMiSang,8:F2} %");
+            AppendMetric(p_box, "sieve.1x2_pct", $"{p_information.deltaPerct1x2,8:F2} %");
+            AppendMetric(p_box, "sieve.2x4_pct", $"{p_information.deltaPerct2x4,8:F2} %");
+            AppendMetric(p_box, "sieve.4x6_pct", $"{p_information.deltaPerct4x6,8:F2} %");
+            AppendMetric(p_box, "weight.total_g", $"{p_information.measuredWeight,8:F2}");
 
-            box.AppendText("--------------------------------------------------------------------------------\n");
+            p_box.AppendText("--------------------------------------------------------------------------------\n");
         }
 
-        public static void updateLogs(IInformation information)
+        public static void updateLogs(IInformation p_information)
         {
-            if (instance == null ||
-                instance.IsDisposed ||
-                !instance.IsHandleCreated)
+            if (s_instance == null ||
+                s_instance.IsDisposed ||
+                !s_instance.IsHandleCreated)
                 return;
 
-            instance.BeginInvoke(new Action(() =>
+            s_instance.BeginInvoke(new Action(() =>
             {
-                AppendLogEntry(instance.textBoxLogging, information);
+                AppendLogEntry(s_instance.textBoxLogging, p_information);
 
-                instance.textBoxLogging.SelectionStart =
-                    instance.textBoxLogging.TextLength;
+                s_instance.textBoxLogging.SelectionStart =
+                    s_instance.textBoxLogging.TextLength;
 
-                instance.textBoxLogging.ScrollToCaret();
+                s_instance.textBoxLogging.ScrollToCaret();
             }));
         }
 
-        private void buttonExportPDFClick(object sender, EventArgs e)
+        private void buttonExportPDFClick(object p_sender, EventArgs p_e)
         {
-            string startTime = Common.repositoryInstance.getStartTime();
-            string currentTime = Common.repositoryInstance.getLatestTime();
+            string startTime = Common.s_repositoryInstance.getStartTime();
+            string currentTime = Common.s_repositoryInstance.getLatestTime();
 
             if (startTime == null || currentTime == null)
             {
@@ -126,20 +126,20 @@ namespace Stone_Application.Forms
                 return;
             }
 
-            string outputFile = Config.outputPath + currentTime + ".docx";
+            string outputFile = Config.s_outputPath + currentTime + ".docx";
 
             PDFExportcs.ExportFile(
-                outputFilePath: outputFile,
-                startTime: startTime,
-                totalTime: currentTime,
-                loadcellRecord: Common.repositoryInstance.getTotal().measuredWeight,
-                realRecord: 0,
-                deviation: 0,
-                isOk: false,
-                perctMisang: Common.repositoryInstance.getTotal().deltaPerctMiSang,
-                perct1x2: Common.repositoryInstance.getTotal().deltaPerct1x2,
-                perct2x4: Common.repositoryInstance.getTotal().deltaPerct2x4,
-                perct4x6: Common.repositoryInstance.getTotal().deltaPerct4x6
+                p_outputFilePath: outputFile,
+                p_startTime: startTime,
+                p_totalTime: currentTime,
+                p_loadcellRecord: Common.s_repositoryInstance.getTotal().measuredWeight,
+                p_realRecord: 0,
+                p_deviation: 0,
+                p_isOk: false,
+                p_perctMisang: Common.s_repositoryInstance.getTotal().deltaPerctMiSang,
+                p_perct1x2: Common.s_repositoryInstance.getTotal().deltaPerct1x2,
+                p_perct2x4: Common.s_repositoryInstance.getTotal().deltaPerct2x4,
+                p_perct4x6: Common.s_repositoryInstance.getTotal().deltaPerct4x6
             );
 
             this.Invoke(new Action(() =>
