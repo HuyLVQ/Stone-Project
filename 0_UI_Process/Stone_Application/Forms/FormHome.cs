@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -13,13 +13,13 @@ namespace Stone_Application.Forms
 {
     public partial class FormHome : Form
     {
-        private MainForm mainForm;
-        private static FormHome instance;
-        public FormHome(MainForm mainForm)
+        private MainForm m_mainForm;
+        private static FormHome s_instance;
+        public FormHome(MainForm p_mainForm)
         {
             InitializeComponent();
-            this.mainForm = mainForm;
-            instance = this;
+            this.m_mainForm = p_mainForm;
+            s_instance = this;
 
             this.TopLevel = false;
             this.FormBorderStyle = FormBorderStyle.None;
@@ -31,18 +31,18 @@ namespace Stone_Application.Forms
             this.pictureBox.SizeMode = PictureBoxSizeMode.Zoom;
         }
 
-        public static void updatePictureBox(Bitmap bmp)
+        public static void updatePictureBox(Bitmap p_bmp)
         {
-            if (instance != null && !instance.IsDisposed)
+            if (s_instance != null && !s_instance.IsDisposed)
             {
-                if (instance.pictureBox.InvokeRequired)
+                if (s_instance.pictureBox.InvokeRequired)
                 {
-                    instance.pictureBox.Invoke(new Action(() => updatePictureBox(bmp)));
+                    s_instance.pictureBox.Invoke(new Action(() => updatePictureBox(p_bmp)));
                     return;
                 }
 
-                if (instance.pictureBox.Image != null) instance.pictureBox.Image.Dispose();
-                instance.pictureBox.Image = (Bitmap)bmp.Clone();
+                if (s_instance.pictureBox.Image != null) s_instance.pictureBox.Image.Dispose();
+                s_instance.pictureBox.Image = (Bitmap)p_bmp.Clone();
             }
         }
     }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -17,9 +17,9 @@ namespace Stone_Application.Observer
             ;
         }
 
-        public void Update(T information)
+        public void Update(T p_information)
         {
-            FormLogs.updateLogs(information);
+            FormLogs.updateLogs(p_information);
         }
     }
 }

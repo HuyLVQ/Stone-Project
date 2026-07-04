@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -18,11 +18,11 @@ namespace Stone_Application.Forms
 {
     public partial class FormSettings : Form
     {
-        private MainForm mainForm;
-        public FormSettings(MainForm mainForm)
+        private MainForm m_mainForm;
+        public FormSettings(MainForm p_mainForm)
         {
             InitializeComponent();
-            this.mainForm = mainForm;
+            this.m_mainForm = p_mainForm;
 
             this.TopLevel = false;
             this.FormBorderStyle = FormBorderStyle.None;
@@ -32,20 +32,20 @@ namespace Stone_Application.Forms
         }
 
 
-        private void comboBoxPortClick(object sender, EventArgs e)
+        private void comboBoxPortClick(object p_sender, EventArgs p_e)
         {
-            comboBoxPort.Items.Clear();
+            m_comboBoxPort.Items.Clear();
             string[] ports = SerialPort.GetPortNames();
-            comboBoxPort.Items.AddRange(ports);
-            if (comboBoxPort.Items.Count > 1)
+            m_comboBoxPort.Items.AddRange(ports);
+            if (m_comboBoxPort.Items.Count > 1)
             {
-                comboBoxPort.SelectedItem = ports[0];
+                m_comboBoxPort.SelectedItem = ports[0];
             }
         }
 
-        private void buttonPLC_Click(object sender, EventArgs e)
+        private void buttonPLC_Click(object p_sender, EventArgs p_e)
         {
-            Common.modbusClient = new ModbusClient(comboBoxPort.SelectedItem.ToString());
+            Common.modbusClient = new ModbusClient(m_comboBoxPort.SelectedItem.ToString());
             Common.modbusClient.UnitIdentifier = 1;
             Common.modbusClient.Baudrate = 115200;
             Common.modbusClient.Parity = System.IO.Ports.Parity.None;
@@ -55,32 +55,32 @@ namespace Stone_Application.Forms
 
             try
             {
-                this.buttonModbus.Enabled = false;
-                this.buttonModbus.ForeColor = System.Drawing.SystemColors.ButtonShadow;
+                this.m_buttonModbus.Enabled = false;
+                this.m_buttonModbus.ForeColor = System.Drawing.SystemColors.ButtonShadow;
                 Common.modbusClient.Connect();
 
-                this.buttonModbus.Enabled = true;
-                this.buttonModbus.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
+                this.m_buttonModbus.Enabled = true;
+                this.m_buttonModbus.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
 
                 try
                 {
                     int[] test = Common.modbusClient.ReadHoldingRegisters(0, 1);
                     MessageBox.Show(this, "Modbus Client successfully connected", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    this.buttonModbus.Enabled = false;
-                    this.buttonModbus.ForeColor = System.Drawing.SystemColors.ButtonShadow;
+                    this.m_buttonModbus.Enabled = false;
+                    this.m_buttonModbus.ForeColor = System.Drawing.SystemColors.ButtonShadow;
 
-                    if (this.buttonCamera.Enabled == false)
+                    if (this.m_buttonCamera.Enabled == false)
                     {
-                        this.buttonAI.Enabled = true;
-                        this.buttonAI.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
+                        this.m_buttonAI.Enabled = true;
+                        this.m_buttonAI.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
                     }
                 }
                 catch (Exception ex)
                 {
                     Common.modbusClient.Disconnect();
                     MessageBox.Show(this, "Modbus connection failed after retries", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    this.buttonModbus.Enabled = true;
-                    this.buttonModbus.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
+                    this.m_buttonModbus.Enabled = true;
+                    this.m_buttonModbus.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
                 }
             }
             catch (Exception ex)
@@ -92,23 +92,23 @@ namespace Stone_Application.Forms
             }
         }
 
-        private void buttonCameraClick(object sender, EventArgs e)
+        private void buttonCameraClick(object p_sender, EventArgs p_e)
         {
             Common.camera = BaslerCamera.getInstance();
             if (Common.camera != null)
             {
                 MessageBox.Show(this, "Camera successfully initialized", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                this.buttonCamera.Enabled = false;
-                this.buttonCamera.ForeColor = System.Drawing.SystemColors.ButtonShadow;
-                if (this.buttonModbus.Enabled == false)
+                this.m_buttonCamera.Enabled = false;
+                this.m_buttonCamera.ForeColor = System.Drawing.SystemColors.ButtonShadow;
+                if (this.m_buttonModbus.Enabled == false)
                 {
-                    this.buttonAI.Enabled = true;
-                    this.buttonAI.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
+                    this.m_buttonAI.Enabled = true;
+                    this.m_buttonAI.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
                 }
             }
         }
 
-        private void buttonAIClick(object sender, EventArgs e)
+        private void buttonAIClick(object p_sender, EventArgs p_e)
         {
             // Implement AI click event
             AIHelper.initializeAI();
@@ -118,11 +118,11 @@ namespace Stone_Application.Forms
             this.Invoke((Action)(() =>
             {
                 MessageBox.Show(this, "AI initialized sucessfully.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                this.buttonAI.Enabled = false;
-                this.buttonAI.ForeColor = System.Drawing.SystemColors.ButtonShadow;
+                this.m_buttonAI.Enabled = false;
+                this.m_buttonAI.ForeColor = System.Drawing.SystemColors.ButtonShadow;
             }));
 
-            Common.stopWatchMain.Start();
+            Common.s_stopWatchMain.Start();
 
 
             MultiThread.thread1Work();

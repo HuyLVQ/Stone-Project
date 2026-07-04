@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -20,9 +20,9 @@ namespace Stone_Application.Repository
     public class SQLServerRepository<T> : IRepository<T> where T : IInformation
     {
         /// ----- Declare members ----- ///
-        private static SQLServerRepository<T> instance;
-        private string connectionString { get; set; }
-        private readonly object _lock = new object();
+        private static SQLServerRepository<T> s_instance;
+        private string m_connectionString;
+        private readonly object m_lock = new object();
 
 
 
@@ -35,12 +35,12 @@ namespace Stone_Application.Repository
                        .SetBasePath(Directory.GetCurrentDirectory())
                        .AddJsonFile("appconfig.json");
             var configurationRoot = configBuilder.Build();
-            connectionString = configurationRoot["db:base_connection"];
+            m_connectionString = configurationRoot["db:base_connection"];
         }
 
         private SqlConnection connect()
         {
-            var connection = new SqlConnection(this.connectionString);
+            var connection = new SqlConnection(this.m_connectionString);
 
             connection.StatisticsEnabled = true;
             connection.FireInfoMessageEventOnUserErrors = true; 
@@ -49,25 +49,25 @@ namespace Stone_Application.Repository
             return connection;
         }
 
-        private SqlCommand openCommand(SqlConnection connection)
+        private SqlCommand openCommand(SqlConnection p_connection)
         {
             var command = new SqlCommand();
-            command.Connection = connection;
+            command.Connection = p_connection;
             return command;
         }
 
         public static SQLServerRepository<T> getIntance()
         {
-            if (instance == null)
+            if (s_instance == null)
             {
-                instance = new SQLServerRepository<T>();
+                s_instance = new SQLServerRepository<T>();
             }
-            return instance;
+            return s_instance;
         }
 
-        void IRepository<T>.add (T entity)
+        void IRepository<T>.add (T p_entity)
         {
-            lock(_lock) 
+            lock (m_lock)
             {
                 using (var connection = this.connect())
                 {
@@ -93,11 +93,11 @@ namespace Stone_Application.Repository
 
                         command.CommandText = query;
                         command.Parameters.AddWithValue("@current_time", DateTime.Now);
-                        command.Parameters.AddWithValue("@delta_misang", entity.deltaPerctMiSang);
-                        command.Parameters.AddWithValue("@delta_1_2", entity.deltaPerct1x2);
-                        command.Parameters.AddWithValue("@delta_2_4", entity.deltaPerct2x4);
-                        command.Parameters.AddWithValue("@delta_4_6", entity.deltaPerct4x6);
-                        command.Parameters.AddWithValue("@total_weight", entity.measuredWeight);
+                        command.Parameters.AddWithValue("@delta_misang", p_entity.deltaPerctMiSang);
+                        command.Parameters.AddWithValue("@delta_1_2", p_entity.deltaPerct1x2);
+                        command.Parameters.AddWithValue("@delta_2_4", p_entity.deltaPerct2x4);
+                        command.Parameters.AddWithValue("@delta_4_6", p_entity.deltaPerct4x6);
+                        command.Parameters.AddWithValue("@total_weight", p_entity.measuredWeight);
 
                         Console.WriteLine("[INFO] [REPOSITORY] [ADD] New record has been added");
                         command.ExecuteNonQuery();
@@ -106,7 +106,7 @@ namespace Stone_Application.Repository
             }
         }
 
-        void IRepository<T>.update(T entity)
+        void IRepository<T>.update(T p_entity)
         {
 
         }
@@ -114,7 +114,7 @@ namespace Stone_Application.Repository
 
         T IRepository<T>.getTotal()
         {
-            lock(_lock)
+            lock (m_lock)
             {
                 using (var connection = this.connect())
                 {
@@ -179,7 +179,7 @@ namespace Stone_Application.Repository
 
         void IRepository<T>.reset()
         {
-            lock(_lock)
+            lock (m_lock)
             {
                 using (var connection = this.connect())
                 {
@@ -194,7 +194,7 @@ namespace Stone_Application.Repository
         }
 
 
-        T IRepository<T>.get(string start_time, string end_time)
+        T IRepository<T>.get(string p_startTime, string p_endTime)
         {
             return null;
         }

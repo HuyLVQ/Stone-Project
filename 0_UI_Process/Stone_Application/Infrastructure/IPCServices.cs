@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.MemoryMappedFiles;
@@ -13,7 +13,7 @@ namespace Stone_Application.IPC
 {
     public class IPCServices
     {
-        private static IPCServices instance;
+        private static IPCServices s_instance;
 
         private IPCServices()
         {
@@ -63,20 +63,20 @@ namespace Stone_Application.IPC
 
         public static IPCServices getInstance()
         {
-            if (instance == null)
+            if (s_instance == null)
             {
-                instance = new IPCServices();
+                s_instance = new IPCServices();
             }
-            return instance;
+            return s_instance;
         }
 
-        public void writeTask(IImage image)
+        public void writeTask(IImage p_image)
         {
             using (MemoryMappedViewStream stream = Common.mmf.CreateViewStream(Config.WRITE_OFFSET, Config.WRITE_READ_SIZE))
             {
                 using (BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, false))
                 {
-                    writer.Write(image.recvImage);
+                    writer.Write(p_image.recvImage);
                 }
             }
         }

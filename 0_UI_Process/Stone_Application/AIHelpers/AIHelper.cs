@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing.Imaging;
@@ -30,8 +30,8 @@ public sealed class AIHelper
 
         ProcessStartInfo psi = new ProcessStartInfo
         {
-            FileName = Config.pythonEnvPath,
-            Arguments = $"\"{Config.pythonScriptPath}\" " +
+            FileName = Config.s_pythonEnvPath,
+            Arguments = $"\"{Config.s_pythonScriptPath}\" " +
                         $"\"{Config.MMF_TAGNAME}\" " +
                         $"\"{Config.UI_2_AI_EVENT_TAGNAME}\" " +
                         $"\"{Config.AI_2_UI_EVENT_TAGNAME}\" " +
@@ -43,20 +43,20 @@ public sealed class AIHelper
             CreateNoWindow = true
         };
 
-        Debug.WriteLine(Config.pythonEnvPath);
+        Debug.WriteLine(Config.s_pythonEnvPath);
 
         Common.pythonProcess = new Process { StartInfo = psi };
 
-        Common.pythonProcess.OutputDataReceived += (s, outArgs) =>
+        Common.pythonProcess.OutputDataReceived += (p_s, p_outArgs) =>
         {
-            if (outArgs.Data != null)
-                Console.WriteLine("[PY] " + outArgs.Data);
+            if (p_outArgs.Data != null)
+                Console.WriteLine("[PY] " + p_outArgs.Data);
         };
 
-        Common.pythonProcess.ErrorDataReceived += (s, errArgs) =>
+        Common.pythonProcess.ErrorDataReceived += (p_s, p_errArgs) =>
         {
-            if (errArgs.Data != null)
-                Console.WriteLine("[ERROR] [PY] " + errArgs.Data);
+            if (p_errArgs.Data != null)
+                Console.WriteLine("[ERROR] [PY] " + p_errArgs.Data);
         };
 
         Common.pythonProcess.Start();
@@ -83,7 +83,7 @@ public sealed class AIHelper
             return;
         }
 
-        using (Image originalImage = Image.FromFile(Config.TEMP_IMAGE_PATH))
+        using (Image originalImage = Image.FromFile(Config.s_tempImagePath))
         using (Bitmap originalBitMap = new Bitmap(
                                                     originalImage,
                                                     Config.IMAGE_WIDTH,

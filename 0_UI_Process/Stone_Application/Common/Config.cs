@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -17,16 +17,16 @@ public static class Config
     public const int ENC_ADDR = 0;
     public const int SENSOR_ADDR = 0;
 
-    private static readonly string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-    public static readonly string RootPath = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", ".."));
+    private static readonly string s_baseDir = AppDomain.CurrentDomain.BaseDirectory;
+    public static readonly string s_rootPath = Path.GetFullPath(Path.Combine(s_baseDir, "..", "..", "..", "..", ".."));
 
-    public static readonly string pythonEnvPath = Path.Combine(RootPath, "1_AI_Process", ".venv", "Scripts", "python.exe");
-    public static readonly string pythonScriptPath = Path.Combine(RootPath, "1_AI_Process", "src", "main.py");
-    public static readonly string TEMP_IMAGE_PATH = Path.Combine(RootPath, "1_AI_Process", "test_img.jpg");
+    public static readonly string s_pythonEnvPath = Path.Combine(s_rootPath, "1_AI_Process", ".venv", "Scripts", "python.exe");
+    public static readonly string s_pythonScriptPath = Path.Combine(s_rootPath, "1_AI_Process", "src", "main.py");
+    public static readonly string s_tempImagePath = Path.Combine(s_rootPath, "1_AI_Process", "test_img.jpg");
 
-    public static readonly string templateDir = Path.Combine(RootPath, "0_UI_Process", "Stone_Application", "PDF_Reference");
-    public static readonly string templatePath = Path.Combine(templateDir, "template.docx");
-    public static readonly string outputPath = Path.Combine(templateDir, "Result_");
+    public static readonly string s_templateDir = Path.Combine(s_rootPath, "0_UI_Process", "Stone_Application", "PDF_Reference");
+    public static readonly string s_templatePath = Path.Combine(s_templateDir, "template.docx");
+    public static readonly string s_outputPath = Path.Combine(s_templateDir, "Result_");
 
 
     public const string MMF_TAGNAME = "cam_01_map";

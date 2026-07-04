@@ -1,4 +1,4 @@
-﻿using Stone_Application.Event;
+using Stone_Application.Event;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,68 +12,68 @@ namespace Stone_Application.Repository
     public class NoSQLRepository<T> : IRepository<T> where T : IInformation
     {
 
-        private static NoSQLRepository<T> instance;
-        private static readonly object _lock = new object();
+        private static NoSQLRepository<T> s_instance;
+        private static readonly object s_lock = new object();
 
-        private SortedList<DateTime, IInformation> customNoSQL;
+        private SortedList<DateTime, IInformation> m_customNoSQL;
 
         private NoSQLRepository()
         {
-            customNoSQL = new SortedList<DateTime, IInformation>();
+            m_customNoSQL = new SortedList<DateTime, IInformation>();
         }
 
         public static NoSQLRepository<T> getIntance()
         {
-            if (instance == null)
+            if (s_instance == null)
             {
-                lock (_lock)
+                lock (s_lock)
                 {
-                    if (instance == null)
+                    if (s_instance == null)
                     {
-                        instance = new NoSQLRepository<T>();
+                        s_instance = new NoSQLRepository<T>();
                     }
                 }
             }
-            return instance;
+            return s_instance;
         }
 
-        void IRepository<T>.add(T entity)
+        void IRepository<T>.add(T p_entity)
         {
-            lock (_lock)
+            lock (s_lock)
             {
-                if (customNoSQL.Count() > 0)
+                if (m_customNoSQL.Count() > 0)
                 {
-                    entity.deltaPerctMiSang += customNoSQL.Values.Last().deltaPerctMiSang;
-                    entity.deltaPerct1x2 += customNoSQL.Values.Last().deltaPerct1x2;
-                    entity.deltaPerct2x4 += customNoSQL.Values.Last().deltaPerct2x4;
-                    entity.deltaPerct4x6 += customNoSQL.Values.Last().deltaPerct4x6;
-                    entity.measuredWeight += customNoSQL.Values.Last().measuredWeight;
+                    p_entity.deltaPerctMiSang += m_customNoSQL.Values.Last().deltaPerctMiSang;
+                    p_entity.deltaPerct1x2 += m_customNoSQL.Values.Last().deltaPerct1x2;
+                    p_entity.deltaPerct2x4 += m_customNoSQL.Values.Last().deltaPerct2x4;
+                    p_entity.deltaPerct4x6 += m_customNoSQL.Values.Last().deltaPerct4x6;
+                    p_entity.measuredWeight += m_customNoSQL.Values.Last().measuredWeight;
                 }
 
-                customNoSQL.Add(DateTime.Now, entity);
+                m_customNoSQL.Add(DateTime.Now, p_entity);
                 Console.WriteLine("[INFO] [REPOSITORY] [ADD] New record has been added");
             }
         }
 
-        void IRepository<T>.update(T entity)
+        void IRepository<T>.update(T p_entity)
         {
             throw new NotImplementedException();
         }
 
         T IRepository<T>.getTotal()
         {
-            lock (_lock)
+            lock (s_lock)
             {
                 T result = Activator.CreateInstance<T>();
 
-                if (customNoSQL.Count > 0)
+                if (m_customNoSQL.Count > 0)
                 {
-                    var latestRecord = customNoSQL.Values.Last();
-                    result.deltaPerctMiSang = latestRecord.deltaPerctMiSang / customNoSQL.Count();
-                    result.deltaPerct1x2 = latestRecord.deltaPerct1x2 / customNoSQL.Count();
-                    result.deltaPerct2x4 = latestRecord.deltaPerct2x4 / customNoSQL.Count();
-                    result.deltaPerct4x6 = latestRecord.deltaPerct4x6 / customNoSQL.Count();
-                    result.measuredWeight = latestRecord.measuredWeight / customNoSQL.Count();
+                    var latestRecord = m_customNoSQL.Values.Last();
+                    result.deltaPerctMiSang = latestRecord.deltaPerctMiSang / m_customNoSQL.Count();
+                    result.deltaPerct1x2 = latestRecord.deltaPerct1x2 / m_customNoSQL.Count();
+                    result.deltaPerct2x4 = latestRecord.deltaPerct2x4 / m_customNoSQL.Count();
+                    result.deltaPerct4x6 = latestRecord.deltaPerct4x6 / m_customNoSQL.Count();
+                    result.measuredWeight = latestRecord.measuredWeight / m_customNoSQL.Count();
                     Console.WriteLine("[INFO] [REPOSITORY] [TOTAL] Some records have been retrieved.");
                 }
                 else
@@ -91,23 +91,23 @@ namespace Stone_Application.Repository
 
         void IRepository<T>.reset()
         {
-            lock (_lock)
+            lock (s_lock)
             {
-                customNoSQL.Clear();
+                m_customNoSQL.Clear();
                 Console.WriteLine("[INFO] [REPOSITORY] [RESET] All records have been cleared.");
             }
         }
 
-        T IRepository<T>.get(string start_time, string end_time)
+        T IRepository<T>.get(string p_startTime, string p_endTime)
         {
-            DateTime startTime = DateTime.Parse(start_time);
-            DateTime endTime = DateTime.Parse(end_time);
+            DateTime startTime = DateTime.Parse(p_startTime);
+            DateTime endTime = DateTime.Parse(p_endTime);
             List<IInformation> filteredRecords;
 
-            lock (_lock)
+            lock (s_lock)
             {
-                filteredRecords = customNoSQL.Where(record => record.Key >= startTime && record.Key <= endTime)
-                                             .Select(record => record.Value)
+                filteredRecords = m_customNoSQL.Where(p_record => p_record.Key >= startTime && p_record.Key <= endTime)
+                                             .Select(p_record => p_record.Value)
                                              .ToList();
             }
 
@@ -138,11 +138,11 @@ namespace Stone_Application.Repository
 
         string IRepository<T>.getStartTime()
         {
-            lock (_lock)
+            lock (s_lock)
             {
-                if (customNoSQL.Count > 0)
+                if (m_customNoSQL.Count > 0)
                 {
-                    return customNoSQL.Keys.First().ToString("yyyy-MM-dd__hh-mm-ss", CultureInfo.InvariantCulture);
+                    return m_customNoSQL.Keys.First().ToString("yyyy-MM-dd__hh-mm-ss", CultureInfo.InvariantCulture);
                 }
                 else
                 {
@@ -155,11 +155,11 @@ namespace Stone_Application.Repository
 
         string IRepository<T>.getLatestTime()
         {
-            lock (_lock)
+            lock (s_lock)
             {
-                if (customNoSQL.Count > 0)
+                if (m_customNoSQL.Count > 0)
                 {
-                    return customNoSQL.Keys.Last().ToString("yyyy-MM-dd__hh-mm-ss", CultureInfo.InvariantCulture);
+                    return m_customNoSQL.Keys.Last().ToString("yyyy-MM-dd__hh-mm-ss", CultureInfo.InvariantCulture);
                 }
                 else
                 {

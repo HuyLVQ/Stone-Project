@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -16,24 +16,24 @@ namespace Stone_Application.Infrastructure
 {
     public static class MultiThread
     {
-        private static CancellationTokenSource cancellationSource;
-        private static Task thread1Task;
-        private static Task thread2Task;
-        private static readonly object startStopLock = new object();
+        private static CancellationTokenSource s_cancellationSource;
+        private static Task s_thread1Task;
+        private static Task s_thread2Task;
+        private static readonly object s_startStopLock = new object();
 
         public static void thread1Work()
         {
-            lock (startStopLock)
+            lock (s_startStopLock)
             {
-                if (cancellationSource == null)
-                    cancellationSource = new CancellationTokenSource();
+                if (s_cancellationSource == null)
+                    s_cancellationSource = new CancellationTokenSource();
 
-                if (thread1Task != null && !thread1Task.IsCompleted)
+                if (s_thread1Task != null && !s_thread1Task.IsCompleted)
                     return; // already running
 
-                CancellationToken token = cancellationSource.Token;
+                CancellationToken token = s_cancellationSource.Token;
 
-                thread1Task = Task.Run(() =>
+                s_thread1Task = Task.Run(() =>
                 {
                     int[] temporaryStorage = new int[2];
                     int encoderFeedback = 0;
@@ -42,18 +42,18 @@ namespace Stone_Application.Infrastructure
                     {
                         try
                         {
-                            if (Common.stopWatchMain.ElapsedMilliseconds >= Config.TIME_INTERVAL)
+                            if (Common.s_stopWatchMain.ElapsedMilliseconds >= Config.TIME_INTERVAL)
                             {
-                                Common.stopWatchMain.Restart();
+                                Common.s_stopWatchMain.Restart();
 
                                 Console.WriteLine("[INFO] [THREAD #1] New Thread 1 cycle...");
 
-                                //lock (Common.lockModbus)
+                                //lock (Common.s_lockModbus)
                                 //{
                                 //    temporaryStorage = Common.modbusClient.ReadHoldingRegisters(Config.ENC_ADDR, 2);
                                 //    encoderFeedback = ((temporaryStorage[0] & 0xFFFF) | (temporaryStorage[1] << 16));
                                 //    Console.WriteLine("[INFO] [THREAD #1] [MODBUS] Modbus read...");
-                                //    System.Threading.Monitor.PulseAll(Common.lockModbus);
+                                //    System.Threading.Monitor.PulseAll(Common.s_lockModbus);
                                 //}
 
                                 Console.WriteLine("[INFO] [THREAD #1] Camera capture...");
@@ -79,18 +79,18 @@ namespace Stone_Application.Infrastructure
 
         public static void thread2Work()
         {
-            lock (startStopLock)
+            lock (s_startStopLock)
             {
-                if (cancellationSource == null)
-                    cancellationSource = new CancellationTokenSource();
+                if (s_cancellationSource == null)
+                    s_cancellationSource = new CancellationTokenSource();
 
-                if (thread2Task != null && !thread2Task.IsCompleted)
+                if (s_thread2Task != null && !s_thread2Task.IsCompleted)
                     return; // already running
 
                 IPCServices ipcServices = IPCServices.getInstance();
                 AIProcessEvent aiProcessEvent = AIProcessEvent.getInstance(ipcServices);
 
-                IEventObserver<IInformation> dbObserver = new DBObserver<IInformation>(Common.repositoryInstance);
+                IEventObserver<IInformation> dbObserver = new DBObserver<IInformation>(Common.s_repositoryInstance);
                 IEventObserver<Event.IImage> uiImageObserver = new UIImageObserver<Event.IImage>();
                 IEventObserver<IInformation> uiInformationObserver = new UIInformationObserver<IInformation>();
 
@@ -98,9 +98,9 @@ namespace Stone_Application.Infrastructure
                 aiProcessEvent.attachInformationObserver(uiInformationObserver);
                 aiProcessEvent.attachInformationObserver(dbObserver);
 
-                CancellationToken token = cancellationSource.Token;
+                CancellationToken token = s_cancellationSource.Token;
 
-                thread2Task = Task.Run(() =>
+                s_thread2Task = Task.Run(() =>
                 {
                     try
                     {
@@ -112,7 +112,7 @@ namespace Stone_Application.Infrastructure
                             try
                             {
                                 // BlockingCollection.Take supports cancellation token
-                                temporaryImage = Common.imageQueue.Take(token);
+                                temporaryImage = Common.s_imageQueue.Take(token);
                             }
                             catch (OperationCanceledException)
                             {
@@ -178,18 +178,18 @@ namespace Stone_Application.Infrastructure
 
         public static void StopAll()
         {
-            lock (startStopLock)
+            lock (s_startStopLock)
             {
-                if (cancellationSource == null)
+                if (s_cancellationSource == null)
                     return;
 
                 Console.WriteLine("[INFO] [THREAD] Stopping threads...");
 
                 try
                 {
-                    cancellationSource.Cancel();
+                    s_cancellationSource.Cancel();
 
-                    Task[] tasksToWait = Array.FindAll(new[] { thread1Task, thread2Task }, t => t != null);
+                    Task[] tasksToWait = Array.FindAll(new[] { s_thread1Task, s_thread2Task }, p_t => p_t != null);
                     if (tasksToWait.Length > 0)
                     {
                         try
@@ -209,10 +209,10 @@ namespace Stone_Application.Infrastructure
                 }
                 finally
                 {
-                    cancellationSource.Dispose();
-                    cancellationSource = null;
-                    thread1Task = null;
-                    thread2Task = null;
+                    s_cancellationSource.Dispose();
+                    s_cancellationSource = null;
+                    s_thread1Task = null;
+                    s_thread2Task = null;
                 }
 
                 Console.WriteLine("[INFO] [THREAD] Threads stopped.");

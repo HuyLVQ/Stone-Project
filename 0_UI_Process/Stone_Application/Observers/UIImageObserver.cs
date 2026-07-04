@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing.Imaging;
 using System.Drawing;
@@ -18,7 +18,7 @@ namespace Stone_Application.Observer
         {
             ;
         }
-        public void Update(T image)
+        public void Update(T p_image)
         {
             Bitmap bmp = new Bitmap(Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, PixelFormat.Format24bppRgb);
             BitmapData data = bmp.LockBits(
@@ -26,7 +26,7 @@ namespace Stone_Application.Observer
                           ImageLockMode.WriteOnly,
                           PixelFormat.Format24bppRgb);
 
-            Marshal.Copy(image.recvImage, 0, data.Scan0, image.recvImage.Length);
+            Marshal.Copy(p_image.recvImage, 0, data.Scan0, p_image.recvImage.Length);
 
             bmp.UnlockBits(data);
 
