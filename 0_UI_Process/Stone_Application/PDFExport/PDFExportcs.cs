@@ -23,8 +23,6 @@ namespace Stone_Application.PDFExport
                                       string p_totalTime,
                                       double p_loadcellRecord,
                                       double p_realRecord,
-                                      double p_deviation,
-                                      bool p_isOk,
                                       double p_perctMisang,
                                       double p_perct1x2,
                                       double p_perct2x4,
@@ -51,13 +49,25 @@ namespace Stone_Application.PDFExport
                             text.Text = text.Text.Replace("AIdudoan", p_realRecord.ToString());
 
                         if (text.Text.Contains("{{Deviation}}"))
-                            text.Text = text.Text.Replace("{{Deviation}}", p_deviation.ToString());
+                            text.Text = text.Text.Replace("{{Deviation}}", Math.Abs(p_realRecord - p_loadcellRecord).ToString());
 
                         if (text.Text.Contains("Dathaykhongdat"))
-                            text.Text = text.Text.Replace("Dathaykhongdat", p_isOk ? "Đạt" : "Không đạt");
+                            text.Text = text.Text.Replace("Dathaykhongdat", (Math.Abs(p_realRecord - p_loadcellRecord)/p_loadcellRecord <= 0.1) ? "Đạt" : "Không đạt");
 
                         if (text.Text.Contains("{{Sign}}"))
-                            text.Text = text.Text.Replace("{{Sign}}", p_isOk ? $"<" : $">");
+                            text.Text = text.Text.Replace("{{Sign}}", (Math.Abs(p_realRecord - p_loadcellRecord) / p_loadcellRecord <= 0.1) ? $"<" : $">");
+
+                        if (text.Text.Contains("{{LVQHMisang}}"))
+                            text.Text = text.Text.Replace("{{LVQHMisang}}", p_perctMisang.ToString(CultureInfo.InvariantCulture));
+
+                        if (text.Text.Contains("{{LVQH1x2}}"))
+                            text.Text = text.Text.Replace("{{LVQH1x2}}", p_perct1x2.ToString(CultureInfo.InvariantCulture));
+
+                        if (text.Text.Contains("{{LVQH2x4}}"))
+                            text.Text = text.Text.Replace("{{LVQH2x4}}", p_perct2x4.ToString(CultureInfo.InvariantCulture));
+
+                        if (text.Text.Contains("{{LVQH4x6}}"))
+                            text.Text = text.Text.Replace("{{LVQH4x6}}", p_perct4x6.ToString(CultureInfo.InvariantCulture));
                     }
 
 

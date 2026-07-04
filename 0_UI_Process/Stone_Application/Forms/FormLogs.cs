@@ -106,6 +106,12 @@ namespace Stone_Application.Forms
 
             s_instance.BeginInvoke(new Action(() =>
             {
+                if (s_instance.textBoxLogging.Text.Length == 0)
+                {
+                    s_instance.m_buttonExportPDF.Enabled = true;
+                    s_instance.m_buttonExportPDF.ForeColor = System.Drawing.SystemColors.ControlText;
+                }
+
                 AppendLogEntry(s_instance.textBoxLogging, p_information);
 
                 s_instance.textBoxLogging.SelectionStart =
@@ -132,9 +138,8 @@ namespace Stone_Application.Forms
                 p_outputFilePath: outputFile,
                 p_startTime: startTime,
                 p_totalTime: currentTime,
-                p_loadcellRecord: Common.s_repositoryInstance.getTotal().measuredWeight,
-                p_realRecord: 0,
-                p_deviation: 0,
+                p_loadcellRecord: float.Parse(s_instance.userInputTextBox.Text, CultureInfo.InvariantCulture),
+                p_realRecord: Common.s_repositoryInstance.getTotal().measuredWeight,
                 p_isOk: false,
                 p_perctMisang: Common.s_repositoryInstance.getTotal().deltaPerctMiSang,
                 p_perct1x2: Common.s_repositoryInstance.getTotal().deltaPerct1x2,
