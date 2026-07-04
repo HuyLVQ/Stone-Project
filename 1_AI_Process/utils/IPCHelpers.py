@@ -12,13 +12,15 @@ import logging
 
 from utils.config import  MMF_TAGNAME, MMF_TIMEOUT, UI_2_AI_EVENT_TAGNAME, AI_2_UI_EVENT_TAGNAME, \
                           IMAGE_WIDTH, IMAGE_HEIGHT, \
-                          WRITE_OFFSET, READ_OFFSET, MEMORY_ALLOCATION
+                          WRITE_OFFSET, READ_OFFSET, MEMORY_ALLOCATION, \
+                          TYPE_COLORS
 
 class IPCHelper():
     m_instance = None
     m_hmap = None
     m_UI2AIEvent = None
     m_AI2UIEvent = None
+    m_concernedRockTypes = list(TYPE_COLORS.keys())
     
     def __init__(p_cls):
         if p_cls.m_instance is None:
@@ -74,19 +76,19 @@ class IPCHelper():
                  p_measuredWeight: float):
         try:
             if (p_classificationCount is not None):
-                measuredMiSang = p_classificationCount.get("MiSang", 0)
+                measuredMiSang = p_classificationCount.get(self.m_concernedRockTypes[0], 0)
                 self.m_hmap.seek(READ_OFFSET)
                 self.m_hmap.write(struct.pack('f', measuredMiSang))
                 
-                measured1x2 = p_classificationCount.get("1x2", 0)
+                measured1x2 = p_classificationCount.get(self.m_concernedRockTypes[1], 0)
                 self.m_hmap.seek(READ_OFFSET + 4)
                 self.m_hmap.write(struct.pack('f', measured1x2))
             
-                measured2x4 = p_classificationCount.get("2x4", 0)
+                measured2x4 = p_classificationCount.get(self.m_concernedRockTypes[2], 0)
                 self.m_hmap.seek(READ_OFFSET + 8)
                 self.m_hmap.write(struct.pack('f', measured2x4))
                 
-                measured4x6 = p_classificationCount.get("4x6", 0)
+                measured4x6 = p_classificationCount.get(self.m_concernedRockTypes[3], 0)
                 self.m_hmap.seek(READ_OFFSET + 12)
                 self.m_hmap.write(struct.pack('f', measured4x6))
                 print(f"[INFO] MiSang: {measuredMiSang}   ||   1x2: {measured1x2}   ||   2x4: {measured2x4}   ||   4x6: {measured4x6}", flush=True)
