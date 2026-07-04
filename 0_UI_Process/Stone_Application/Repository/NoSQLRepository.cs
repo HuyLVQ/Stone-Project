@@ -1,28 +1,26 @@
 using Stone_Application.Event;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Stone_Application.Repository
 {
-    public class NoSQLRepository<T> : IRepository<T> where T : IInformation
+    public class NoSQLRepository<TInformation, TResultInformation> : IRepository<TInformation, TResultInformation>
+        where TInformation : IInformation
+        where TResultInformation : IResultInformation, new()
     {
-
-        private static NoSQLRepository<T> s_instance;
+        private static NoSQLRepository<TInformation, TResultInformation> s_instance;
         private static readonly object s_lock = new object();
 
-        private SortedList<DateTime, IInformation> m_customNoSQL;
+        private readonly SortedList<DateTime, IInformation> m_customNoSQL;
 
         private NoSQLRepository()
         {
             m_customNoSQL = new SortedList<DateTime, IInformation>();
         }
 
-        public static NoSQLRepository<T> getIntance()
+        public static NoSQLRepository<TInformation, TResultInformation> getIntance()
         {
             if (s_instance == null)
             {
@@ -30,24 +28,26 @@ namespace Stone_Application.Repository
                 {
                     if (s_instance == null)
                     {
-                        s_instance = new NoSQLRepository<T>();
+                        s_instance = new NoSQLRepository<TInformation, TResultInformation>();
                     }
                 }
             }
+
             return s_instance;
         }
 
-        void IRepository<T>.add(T p_entity)
+        void IRepository<TInformation, TResultInformation>.add(TInformation p_entity)
         {
             lock (s_lock)
             {
-                if (m_customNoSQL.Count() > 0)
+                if (m_customNoSQL.Count > 0)
                 {
-                    p_entity.deltaPerctMiSang += m_customNoSQL.Values.Last().deltaPerctMiSang;
-                    p_entity.deltaPerct1x2 += m_customNoSQL.Values.Last().deltaPerct1x2;
-                    p_entity.deltaPerct2x4 += m_customNoSQL.Values.Last().deltaPerct2x4;
-                    p_entity.deltaPerct4x6 += m_customNoSQL.Values.Last().deltaPerct4x6;
-                    p_entity.measuredWeight += m_customNoSQL.Values.Last().measuredWeight;
+                    IInformation latestRecord = m_customNoSQL.Values.Last();
+                    p_entity.deltaPerctMiSang += latestRecord.deltaPerctMiSang;
+                    p_entity.deltaPerct1x2 += latestRecord.deltaPerct1x2;
+                    p_entity.deltaPerct2x4 += latestRecord.deltaPerct2x4;
+                    p_entity.deltaPerct4x6 += latestRecord.deltaPerct4x6;
+                    p_entity.measuredWeight += latestRecord.measuredWeight;
                 }
 
                 m_customNoSQL.Add(DateTime.Now, p_entity);
@@ -55,41 +55,33 @@ namespace Stone_Application.Repository
             }
         }
 
-        void IRepository<T>.update(T p_entity)
+        void IRepository<TInformation, TResultInformation>.update(TInformation p_entity)
         {
             throw new NotImplementedException();
         }
 
-        T IRepository<T>.getTotal()
+        TResultInformation IRepository<TInformation, TResultInformation>.getTotal()
         {
             lock (s_lock)
             {
-                T result = Activator.CreateInstance<T>();
-
-                if (m_customNoSQL.Count > 0)
+                if (m_customNoSQL.Count == 0)
                 {
-                    var latestRecord = m_customNoSQL.Values.Last();
-                    result.deltaPerctMiSang = latestRecord.deltaPerctMiSang / m_customNoSQL.Count();
-                    result.deltaPerct1x2 = latestRecord.deltaPerct1x2 / m_customNoSQL.Count();
-                    result.deltaPerct2x4 = latestRecord.deltaPerct2x4 / m_customNoSQL.Count();
-                    result.deltaPerct4x6 = latestRecord.deltaPerct4x6 / m_customNoSQL.Count();
-                    result.measuredWeight = latestRecord.measuredWeight / m_customNoSQL.Count();
-                    Console.WriteLine("[INFO] [REPOSITORY] [TOTAL] Some records have been retrieved.");
-                }
-                else
-                {
-                    result.deltaPerctMiSang = 0.0f;
-                    result.deltaPerct1x2 = 0.0f;
-                    result.deltaPerct2x4 = 0.0f;
-                    result.deltaPerct4x6 = 0.0f;
-                    result.measuredWeight = 0.0f;
                     Console.WriteLine("[WARN] [REPOSITORY] Zero Count. Returning default values.");
+                    return CreateResult(0, 0, 0, 0, 0.0f);
                 }
-                return result;
+
+                IInformation latestRecord = m_customNoSQL.Values.Last();
+                Console.WriteLine("[INFO] [REPOSITORY] [TOTAL] Some records have been retrieved.");
+                return CreateResult(
+                    latestRecord.deltaPerctMiSang,
+                    latestRecord.deltaPerct1x2,
+                    latestRecord.deltaPerct2x4,
+                    latestRecord.deltaPerct4x6,
+                    latestRecord.measuredWeight);
             }
         }
 
-        void IRepository<T>.reset()
+        void IRepository<TInformation, TResultInformation>.reset()
         {
             lock (s_lock)
             {
@@ -98,45 +90,38 @@ namespace Stone_Application.Repository
             }
         }
 
-        T IRepository<T>.get(string p_startTime, string p_endTime)
+        TResultInformation IRepository<TInformation, TResultInformation>.get(string p_startTime, string p_endTime)
         {
-            DateTime startTime = DateTime.Parse(p_startTime);
-            DateTime endTime = DateTime.Parse(p_endTime);
+            DateTime startTime = DateTime.Parse(p_startTime, CultureInfo.InvariantCulture);
+            DateTime endTime = DateTime.Parse(p_endTime, CultureInfo.InvariantCulture);
             List<IInformation> filteredRecords;
 
             lock (s_lock)
             {
-                filteredRecords = m_customNoSQL.Where(p_record => p_record.Key >= startTime && p_record.Key <= endTime)
-                                             .Select(p_record => p_record.Value)
-                                             .ToList();
+                filteredRecords = m_customNoSQL
+                    .Where(p_record => p_record.Key >= startTime && p_record.Key <= endTime)
+                    .Select(p_record => p_record.Value)
+                    .ToList();
             }
 
-            T result = Activator.CreateInstance<T>();
-            if (filteredRecords.Count > 0)
+            if (filteredRecords.Count == 0)
             {
-                var latestRecord = filteredRecords.Last();
-                var oldestRecord = filteredRecords.First();
-                result.deltaPerctMiSang = latestRecord.deltaPerctMiSang - oldestRecord.deltaPerctMiSang;
-                result.deltaPerct1x2 = latestRecord.deltaPerct1x2 - oldestRecord.deltaPerct1x2;
-                result.deltaPerct2x4 = latestRecord.deltaPerct2x4 - oldestRecord.deltaPerct2x4;
-                result.deltaPerct4x6 = latestRecord.deltaPerct4x6 - oldestRecord.deltaPerct4x6;
-                result.measuredWeight = latestRecord.measuredWeight - oldestRecord.measuredWeight;
-                Console.WriteLine("[INFO] [REPOSITORY] [GET] Some records have been retrieved for the specified time range.");
-            }
-            else
-            {
-                result.deltaPerctMiSang = 0.0f;
-                result.deltaPerct1x2 = 0.0f;
-                result.deltaPerct2x4 = 0.0f;
-                result.deltaPerct4x6 = 0.0f;
-                result.measuredWeight = 0.0f;
                 Console.WriteLine("[WARN] [REPOSITORY] Zero Count for the specified time range. Returning default values.");
+                return CreateResult(0, 0, 0, 0, 0.0f);
             }
-            return result;
+
+            IInformation latestRecord = filteredRecords.Last();
+            IInformation oldestRecord = filteredRecords.First();
+            Console.WriteLine("[INFO] [REPOSITORY] [GET] Some records have been retrieved for the specified time range.");
+            return CreateResult(
+                latestRecord.deltaPerctMiSang - oldestRecord.deltaPerctMiSang,
+                latestRecord.deltaPerct1x2 - oldestRecord.deltaPerct1x2,
+                latestRecord.deltaPerct2x4 - oldestRecord.deltaPerct2x4,
+                latestRecord.deltaPerct4x6 - oldestRecord.deltaPerct4x6,
+                latestRecord.measuredWeight - oldestRecord.measuredWeight);
         }
 
-
-        string IRepository<T>.getStartTime()
+        string IRepository<TInformation, TResultInformation>.getStartTime()
         {
             lock (s_lock)
             {
@@ -144,16 +129,13 @@ namespace Stone_Application.Repository
                 {
                     return m_customNoSQL.Keys.First().ToString("yyyy-MM-dd__hh-mm-ss", CultureInfo.InvariantCulture);
                 }
-                else
-                {
-                    Console.WriteLine("[WARN] [REPOSITORY] No records available. Returning empty string.");
-                    return string.Empty;
-                }
+
+                Console.WriteLine("[WARN] [REPOSITORY] No records available. Returning empty string.");
+                return string.Empty;
             }
         }
 
-
-        string IRepository<T>.getLatestTime()
+        string IRepository<TInformation, TResultInformation>.getLatestTime()
         {
             lock (s_lock)
             {
@@ -161,12 +143,32 @@ namespace Stone_Application.Repository
                 {
                     return m_customNoSQL.Keys.Last().ToString("yyyy-MM-dd__hh-mm-ss", CultureInfo.InvariantCulture);
                 }
-                else
-                {
-                    Console.WriteLine("[WARN] [REPOSITORY] No records available. Returning empty string.");
-                    return string.Empty;
-                }
+
+                Console.WriteLine("[WARN] [REPOSITORY] No records available. Returning empty string.");
+                return string.Empty;
             }
+        }
+
+        private static TResultInformation CreateResult(
+            float p_miSang,
+            float p_1x2,
+            float p_2x4,
+            float p_4x6,
+            float p_weight)
+        {
+            TResultInformation result = new TResultInformation();
+            float total = p_miSang + p_1x2 + p_2x4 + p_4x6;
+
+            if (total > 0)
+            {
+                result.resultPerctMiSang = p_miSang / total;
+                result.resultPerct1x2 = p_1x2 / total;
+                result.resultPerct2x4 = p_2x4 / total;
+                result.resultPerct4x6 = p_4x6 / total;
+            }
+
+            result.resultWeight = p_weight;
+            return result;
         }
     }
 }

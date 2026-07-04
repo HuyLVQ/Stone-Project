@@ -10,9 +10,9 @@ namespace Stone_Application.Observer
 {
     public class DBObserver<T> : IEventObserver<T> where T : IInformation
     {
-        private readonly IRepository<T> m_sqlServerRepository;
+        private readonly IRepository<T, IResultInformation> m_sqlServerRepository;
 
-        public DBObserver (IRepository<T> p_sqlInstance)
+        public DBObserver (IRepository<T, IResultInformation> p_sqlInstance)
         {
             m_sqlServerRepository = p_sqlInstance;
         }

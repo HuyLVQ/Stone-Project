@@ -17,10 +17,12 @@ using DocumentFormat.OpenXml.EMMA;
 namespace Stone_Application.Repository
 {
 
-    public class SQLServerRepository<T> : IRepository<T> where T : IInformation
+    public class SQLServerRepository<TInformation, TResultInformation> : IRepository<TInformation, TResultInformation>
+        where TInformation : IInformation
+        where TResultInformation : IResultInformation, new()
     {
         /// ----- Declare members ----- ///
-        private static SQLServerRepository<T> s_instance;
+        private static SQLServerRepository<TInformation, TResultInformation> s_instance;
         private string m_connectionString;
         private readonly object m_lock = new object();
 
@@ -56,16 +58,16 @@ namespace Stone_Application.Repository
             return command;
         }
 
-        public static SQLServerRepository<T> getIntance()
+        public static SQLServerRepository<TInformation, TResultInformation> getIntance()
         {
             if (s_instance == null)
             {
-                s_instance = new SQLServerRepository<T>();
+                s_instance = new SQLServerRepository<TInformation, TResultInformation>();
             }
             return s_instance;
         }
 
-        void IRepository<T>.add (T p_entity)
+        void IRepository<TInformation, TResultInformation>.add (TInformation p_entity)
         {
             lock (m_lock)
             {
@@ -106,13 +108,13 @@ namespace Stone_Application.Repository
             }
         }
 
-        void IRepository<T>.update(T p_entity)
+        void IRepository<TInformation, TResultInformation>.update(TInformation p_entity)
         {
 
         }
 
 
-        T IRepository<T>.getTotal()
+        TResultInformation IRepository<TInformation, TResultInformation>.getTotal()
         {
             lock (m_lock)
             {
@@ -134,36 +136,36 @@ namespace Stone_Application.Repository
                                                     ORDER BY current_time DESC";
                         command.CommandText = getRecordQuery;
 
-                        T result = Activator.CreateInstance<T>();
+                        TResultInformation result = new TResultInformation();
                         using (var read = command.ExecuteReader())
                         {
                             if (count == 0)
                             {
-                                result.deltaPerctMiSang = 0.0f;
-                                result.deltaPerct1x2 = 0.0f;
-                                result.deltaPerct2x4 = 0.0f;
-                                result.deltaPerct4x6 = 0.0f;
-                                result.measuredWeight = 0.0f;
+                                result.resultPerctMiSang = 0.0f;
+                                result.resultPerct1x2 = 0.0f;
+                                result.resultPerct2x4 = 0.0f;
+                                result.resultPerct4x6 = 0.0f;
+                                result.resultWeight = 0.0f;
 
                                 Console.WriteLine("[WARN] [REPOSITORY] Zero Count. Returning default values.");
                             } else
                             {
                                 if (read.Read())
                                 {
-                                    result.deltaPerctMiSang = read.GetFloat(read.GetOrdinal("perct_misang")) / count;
-                                    result.deltaPerct1x2 = read.GetFloat(read.GetOrdinal("perct_1_2")) / count;
-                                    result.deltaPerct2x4 = read.GetFloat(read.GetOrdinal("perct_2_4")) / count;
-                                    result.deltaPerct4x6 = read.GetFloat(read.GetOrdinal("perct_4_6")) / count;
-                                    result.measuredWeight = read.GetFloat(read.GetOrdinal("total_weight")) / count;
+                                    result.resultPerctMiSang = read.GetFloat(read.GetOrdinal("perct_misang")) / count;
+                                    result.resultPerct1x2 = read.GetFloat(read.GetOrdinal("perct_1_2")) / count;
+                                    result.resultPerct2x4 = read.GetFloat(read.GetOrdinal("perct_2_4")) / count;
+                                    result.resultPerct4x6 = read.GetFloat(read.GetOrdinal("perct_4_6")) / count;
+                                    result.resultWeight = read.GetFloat(read.GetOrdinal("total_weight")) / count;
                                     Console.WriteLine("[INFO] [REPOSITORY] [TOTAL] Some records have been retrieved.");
                                 }
                                 else
                                 {
-                                    result.deltaPerctMiSang = 0.0f;
-                                    result.deltaPerct1x2 = 0.0f;
-                                    result.deltaPerct2x4 = 0.0f;
-                                    result.deltaPerct4x6 = 0.0f;
-                                    result.measuredWeight = 0.0f;
+                                    result.resultPerctMiSang = 0.0f;
+                                    result.resultPerct1x2 = 0.0f;
+                                    result.resultPerct2x4 = 0.0f;
+                                    result.resultPerct4x6 = 0.0f;
+                                    result.resultWeight = 0.0f;
 
                                     Console.WriteLine("[WARN] [REPOSITORY] No records found in the database. Returning default values.");
                                 }
@@ -177,7 +179,7 @@ namespace Stone_Application.Repository
             
         }
 
-        void IRepository<T>.reset()
+        void IRepository<TInformation, TResultInformation>.reset()
         {
             lock (m_lock)
             {
@@ -194,17 +196,17 @@ namespace Stone_Application.Repository
         }
 
 
-        T IRepository<T>.get(string p_startTime, string p_endTime)
+        TResultInformation IRepository<TInformation, TResultInformation>.get(string p_startTime, string p_endTime)
         {
             return null;
         }
 
-        string IRepository<T>.getStartTime()
+        string IRepository<TInformation, TResultInformation>.getStartTime()
         {
             return null;
         }
 
-        string IRepository<T>.getLatestTime()
+        string IRepository<TInformation, TResultInformation>.getLatestTime()
         {
             return null;
         }

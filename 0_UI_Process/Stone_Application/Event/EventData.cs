@@ -16,6 +16,15 @@ namespace Stone_Application.Event
         public float measuredWeight { get; set; }
     }
 
+    public class IResultInformation
+    {
+        public float resultPerctMiSang { get; set; }
+        public float resultPerct1x2 { get; set; }
+        public float resultPerct2x4 { get; set; }
+        public float resultPerct4x6 { get; set; }
+        public float resultWeight { get; set; }
+    }
+
     public class IImage
     {
         public byte[] recvImage { get; set; }

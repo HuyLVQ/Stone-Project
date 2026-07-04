@@ -50,7 +50,7 @@ public static class Common
         public static BlockingCollection<Stone_Application.Event.IImage> s_imageQueue = new BlockingCollection<Stone_Application.Event.IImage>(new ConcurrentQueue<Stone_Application.Event.IImage>(), Config.BUFFER_BOUND);
 
 
-        //public static IRepository<IInformation> s_repositoryInstance = SQLServerRepository<IInformation>.getIntance();
-        public static IRepository<IInformation> s_repositoryInstance = NoSQLRepository<IInformation>.getIntance();
+        //public static IRepository<IInformation, IResultInformation> s_repositoryInstance = SQLServerRepository<IInformation, IResultInformation>.getIntance();
+        public static IRepository<IInformation, IResultInformation> s_repositoryInstance = NoSQLRepository<IInformation, IResultInformation>.getIntance();
 
 }

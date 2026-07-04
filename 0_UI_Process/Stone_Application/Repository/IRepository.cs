@@ -6,15 +6,15 @@ using System.Threading.Tasks;
 
 namespace Stone_Application.Repository
 {
-    public interface IRepository<T>
+    public interface IRepository<TInformation, TResultInformation>
     {
-        void add(T p_entity);
-        void update(T p_entity);
+        void add(TInformation p_entity);
+        void update(TInformation p_entity);
 
-        T getTotal();
+        TResultInformation getTotal();
         void reset();
 
-        T get(string p_startTime, string p_endTime);
+        TResultInformation get(string p_startTime, string p_endTime);
 
         string getStartTime();
         string getLatestTime();

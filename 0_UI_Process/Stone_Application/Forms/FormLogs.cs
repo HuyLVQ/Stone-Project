@@ -125,6 +125,7 @@ namespace Stone_Application.Forms
         {
             string startTime = Common.s_repositoryInstance.getStartTime();
             string currentTime = Common.s_repositoryInstance.getLatestTime();
+            IResultInformation totalResult = Common.s_repositoryInstance.getTotal();
 
             if (startTime == null || currentTime == null)
             {
@@ -139,12 +140,11 @@ namespace Stone_Application.Forms
                 p_startTime: startTime,
                 p_totalTime: currentTime,
                 p_loadcellRecord: float.Parse(s_instance.userInputTextBox.Text, CultureInfo.InvariantCulture),
-                p_realRecord: Common.s_repositoryInstance.getTotal().measuredWeight,
-                p_isOk: false,
-                p_perctMisang: Common.s_repositoryInstance.getTotal().deltaPerctMiSang,
-                p_perct1x2: Common.s_repositoryInstance.getTotal().deltaPerct1x2,
-                p_perct2x4: Common.s_repositoryInstance.getTotal().deltaPerct2x4,
-                p_perct4x6: Common.s_repositoryInstance.getTotal().deltaPerct4x6
+                p_realRecord: totalResult.resultWeight,
+                p_perctMisang: totalResult.resultPerctMiSang,
+                p_perct1x2: totalResult.resultPerct1x2,
+                p_perct2x4: totalResult.resultPerct2x4,
+                p_perct4x6: totalResult.resultPerct4x6
             );
 
             this.Invoke(new Action(() =>
