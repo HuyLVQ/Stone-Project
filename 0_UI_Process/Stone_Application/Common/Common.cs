@@ -15,8 +15,17 @@ using System.Collections.Concurrent;
 
 public static class Common
     {
+        public enum currentState
+        {
+            UN_INIT = 0,
+            READY = 1,
+            STREAMING = 2,
+        }
+
+        public static currentState s_currentState = currentState.UN_INIT;
+        public static readonly object s_lockState = new object();
+
         public static readonly object s_lockModbus = new object();
-        
 
         public static Stopwatch s_stopWatchMain = new Stopwatch();
 

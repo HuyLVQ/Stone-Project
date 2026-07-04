@@ -180,6 +180,14 @@ namespace Stone_Application
             UpdateExpandButtonText();
         }
 
+        protected override void OnShown(EventArgs p_e)
+        {
+            base.OnShown(p_e);
+            this.m_panelHighlight.Height = this.m_buttonHome.Height;
+            this.m_panelHighlight.Top = this.m_buttonHome.Top;
+            this.m_panelHighlight.Left = this.m_buttonHome.Left;
+        }
+
         protected override bool ProcessCmdKey(ref Message p_msg, Keys p_keyData)
         {
             if (p_keyData == Keys.F11)

@@ -114,6 +114,7 @@ namespace Stone_Application.Forms
             AIHelper.initializeAI();
             AIHelper.warmUpAI();
 
+            FormHome.disableStreaming();
 
             this.Invoke((Action)(() =>
             {

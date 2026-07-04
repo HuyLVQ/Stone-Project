@@ -29,7 +29,6 @@ namespace Stone_Application.Forms
         private void InitializeComponent()
         {
             this.m_groupBoxLogging = new System.Windows.Forms.GroupBox();
-            this.label1 = new System.Windows.Forms.Label();
             this.userInputTextBox = new System.Windows.Forms.TextBox();
             this.m_buttonExportPDF = new System.Windows.Forms.Button();
             this.textBoxLogging = new System.Windows.Forms.RichTextBox();
@@ -38,7 +37,6 @@ namespace Stone_Application.Forms
             // 
             // m_groupBoxLogging
             // 
-            this.m_groupBoxLogging.Controls.Add(this.label1);
             this.m_groupBoxLogging.Controls.Add(this.userInputTextBox);
             this.m_groupBoxLogging.Controls.Add(this.m_buttonExportPDF);
             this.m_groupBoxLogging.Controls.Add(this.textBoxLogging);
@@ -51,16 +49,6 @@ namespace Stone_Application.Forms
             this.m_groupBoxLogging.TabIndex = 0;
             this.m_groupBoxLogging.TabStop = false;
             this.m_groupBoxLogging.Text = "Logging";
-            // 
-            // label1
-            // 
-            this.label1.AutoSize = true;
-            this.label1.Font = new System.Drawing.Font("Nirmala UI", 7.8F, System.Drawing.FontStyle.Bold);
-            this.label1.Location = new System.Drawing.Point(55, 734);
-            this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(141, 17);
-            this.label1.TabIndex = 3;
-            this.label1.Text = "Actual Weight (in kg)";
             // 
             // userInputTextBox
             // 
@@ -119,6 +107,5 @@ namespace Stone_Application.Forms
         public System.Windows.Forms.RichTextBox textBoxLogging;
         private System.Windows.Forms.Button m_buttonExportPDF;
         private System.Windows.Forms.TextBox userInputTextBox;
-        private System.Windows.Forms.Label label1;
     }
 }

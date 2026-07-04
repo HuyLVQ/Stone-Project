@@ -29,8 +29,8 @@ namespace Stone_Application.Forms
         private void InitializeComponent()
         {
             this.m_groupBoxPicture = new System.Windows.Forms.GroupBox();
-            this.stopButton = new System.Windows.Forms.Button();
-            this.startButton = new System.Windows.Forms.Button();
+            this.m_stopButton = new System.Windows.Forms.Button();
+            this.m_startButton = new System.Windows.Forms.Button();
             this.pictureBox = new System.Windows.Forms.PictureBox();
             this.m_groupBoxPicture.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
@@ -38,8 +38,8 @@ namespace Stone_Application.Forms
             // 
             // m_groupBoxPicture
             // 
-            this.m_groupBoxPicture.Controls.Add(this.stopButton);
-            this.m_groupBoxPicture.Controls.Add(this.startButton);
+            this.m_groupBoxPicture.Controls.Add(this.m_stopButton);
+            this.m_groupBoxPicture.Controls.Add(this.m_startButton);
             this.m_groupBoxPicture.Controls.Add(this.pictureBox);
             this.m_groupBoxPicture.Dock = System.Windows.Forms.DockStyle.Fill;
             this.m_groupBoxPicture.Font = new System.Drawing.Font("Nirmala UI", 19.8F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
@@ -52,31 +52,33 @@ namespace Stone_Application.Forms
             this.m_groupBoxPicture.TabStop = false;
             this.m_groupBoxPicture.Text = "Video Stream";
             // 
-            // stopButton
+            // m_stopButton
             // 
-            this.stopButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.stopButton.Enabled = false;
-            this.stopButton.Font = new System.Drawing.Font("Nirmala UI", 10.8F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.stopButton.ForeColor = System.Drawing.SystemColors.ActiveBorder;
-            this.stopButton.Location = new System.Drawing.Point(194, 723);
-            this.stopButton.Name = "stopButton";
-            this.stopButton.Size = new System.Drawing.Size(155, 37);
-            this.stopButton.TabIndex = 2;
-            this.stopButton.Text = "Stop";
-            this.stopButton.UseVisualStyleBackColor = true;
+            this.m_stopButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.m_stopButton.Enabled = false;
+            this.m_stopButton.Font = new System.Drawing.Font("Nirmala UI", 10.8F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.m_stopButton.ForeColor = System.Drawing.SystemColors.ActiveBorder;
+            this.m_stopButton.Location = new System.Drawing.Point(194, 723);
+            this.m_stopButton.Name = "m_stopButton";
+            this.m_stopButton.Size = new System.Drawing.Size(155, 37);
+            this.m_stopButton.TabIndex = 2;
+            this.m_stopButton.Text = "Stop";
+            this.m_stopButton.UseVisualStyleBackColor = true;
+            this.m_stopButton.Click += new System.EventHandler(this.stopButtonClick);
             // 
-            // startButton
+            // m_startButton
             // 
-            this.startButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.startButton.Enabled = false;
-            this.startButton.Font = new System.Drawing.Font("Nirmala UI", 10.8F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.startButton.ForeColor = System.Drawing.SystemColors.ActiveBorder;
-            this.startButton.Location = new System.Drawing.Point(24, 723);
-            this.startButton.Name = "startButton";
-            this.startButton.Size = new System.Drawing.Size(155, 37);
-            this.startButton.TabIndex = 1;
-            this.startButton.Text = "Start";
-            this.startButton.UseVisualStyleBackColor = true;
+            this.m_startButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.m_startButton.Enabled = false;
+            this.m_startButton.Font = new System.Drawing.Font("Nirmala UI", 10.8F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.m_startButton.ForeColor = System.Drawing.SystemColors.ActiveBorder;
+            this.m_startButton.Location = new System.Drawing.Point(24, 723);
+            this.m_startButton.Name = "m_startButton";
+            this.m_startButton.Size = new System.Drawing.Size(155, 37);
+            this.m_startButton.TabIndex = 1;
+            this.m_startButton.Text = "Start";
+            this.m_startButton.UseVisualStyleBackColor = true;
+            this.m_startButton.Click += new System.EventHandler(this.startButtonClick);
             // 
             // pictureBox
             // 
@@ -109,7 +111,7 @@ namespace Stone_Application.Forms
 
         private System.Windows.Forms.GroupBox m_groupBoxPicture;
         public System.Windows.Forms.PictureBox pictureBox;
-        private System.Windows.Forms.Button startButton;
-        private System.Windows.Forms.Button stopButton;
+        private System.Windows.Forms.Button m_startButton;
+        private System.Windows.Forms.Button m_stopButton;
     }
 }

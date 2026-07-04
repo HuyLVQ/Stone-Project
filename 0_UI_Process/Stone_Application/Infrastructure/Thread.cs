@@ -42,6 +42,16 @@ namespace Stone_Application.Infrastructure
                     {
                         try
                         {
+                            lock (Common.s_lockState)
+                            {
+                                if (Common.s_currentState != Common.currentState.STREAMING)
+                                {
+                                    Console.WriteLine("[INFO] [THREAD #1] Not in streamin mode, go to sleep...");
+                                    Thread.Sleep(100);
+                                    continue;
+                                }
+                            }
+
                             if (Common.s_stopWatchMain.ElapsedMilliseconds >= Config.TIME_INTERVAL)
                             {
                                 Common.s_stopWatchMain.Restart();
@@ -61,6 +71,7 @@ namespace Stone_Application.Infrastructure
                             }
                             // small delay to avoid busy spin if interval is very small
                             Thread.Sleep(1);
+                            Console.WriteLine("[INFO] [THREAD #1] Exiting thread.");
                         }
                         catch (OperationCanceledException)
                         {
@@ -72,7 +83,6 @@ namespace Stone_Application.Infrastructure
                         }
                     }
 
-                    Console.WriteLine("[INFO] [THREAD #1] Exiting thread.");
                 }, token);
             }
         }
