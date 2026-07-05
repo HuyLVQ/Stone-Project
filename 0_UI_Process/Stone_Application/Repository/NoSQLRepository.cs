@@ -43,10 +43,10 @@ namespace Stone_Application.Repository
                 if (m_customNoSQL.Count > 0)
                 {
                     IInformation latestRecord = m_customNoSQL.Values.Last();
-                    p_entity.deltaPerctMiSang += latestRecord.deltaPerctMiSang;
-                    p_entity.deltaPerct1x2 += latestRecord.deltaPerct1x2;
-                    p_entity.deltaPerct2x4 += latestRecord.deltaPerct2x4;
-                    p_entity.deltaPerct4x6 += latestRecord.deltaPerct4x6;
+                    p_entity.countMiSang += latestRecord.countMiSang;
+                    p_entity.count1x2 += latestRecord.count1x2;
+                    p_entity.count2x4 += latestRecord.count2x4;
+                    p_entity.count4x6 += latestRecord.count4x6;
                     p_entity.measuredWeight += latestRecord.measuredWeight;
                 }
 
@@ -73,10 +73,10 @@ namespace Stone_Application.Repository
                 IInformation latestRecord = m_customNoSQL.Values.Last();
                 Console.WriteLine("[INFO] [REPOSITORY] [TOTAL] Some records have been retrieved.");
                 return CreateResult(
-                    latestRecord.deltaPerctMiSang,
-                    latestRecord.deltaPerct1x2,
-                    latestRecord.deltaPerct2x4,
-                    latestRecord.deltaPerct4x6,
+                    latestRecord.countMiSang,
+                    latestRecord.count1x2,
+                    latestRecord.count2x4,
+                    latestRecord.count4x6,
                     latestRecord.measuredWeight);
             }
         }
@@ -114,10 +114,10 @@ namespace Stone_Application.Repository
             IInformation oldestRecord = filteredRecords.First();
             Console.WriteLine("[INFO] [REPOSITORY] [GET] Some records have been retrieved for the specified time range.");
             return CreateResult(
-                latestRecord.deltaPerctMiSang - oldestRecord.deltaPerctMiSang,
-                latestRecord.deltaPerct1x2 - oldestRecord.deltaPerct1x2,
-                latestRecord.deltaPerct2x4 - oldestRecord.deltaPerct2x4,
-                latestRecord.deltaPerct4x6 - oldestRecord.deltaPerct4x6,
+                latestRecord.countMiSang - oldestRecord.countMiSang,
+                latestRecord.count1x2 - oldestRecord.count1x2,
+                latestRecord.count2x4 - oldestRecord.count2x4,
+                latestRecord.count4x6 - oldestRecord.count4x6,
                 latestRecord.measuredWeight - oldestRecord.measuredWeight);
         }
 

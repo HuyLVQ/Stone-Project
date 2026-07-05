@@ -88,10 +88,12 @@ namespace Stone_Application.Forms
             AppendColoredText(p_box, $"{LOG_COMPONENT_NAME,-10}", Color.MediumPurple, true);
             p_box.AppendText($" | Measurement snapshot received | event_id={eventId:D6}\n");
 
-            AppendMetric(p_box, "sieve.misang_pct", $"{p_information.deltaPerctMiSang,8:F2} %");
-            AppendMetric(p_box, "sieve.1x2_pct", $"{p_information.deltaPerct1x2,8:F2} %");
-            AppendMetric(p_box, "sieve.2x4_pct", $"{p_information.deltaPerct2x4,8:F2} %");
-            AppendMetric(p_box, "sieve.4x6_pct", $"{p_information.deltaPerct4x6,8:F2} %");
+            Int64 totalCount = p_information.countMiSang + p_information.count1x2 + p_information.count2x4 + p_information.count4x6;
+
+            AppendMetric(p_box, "sieve.misang_pct", $"{p_information.countMiSang / totalCount,8:F2} %");
+            AppendMetric(p_box, "sieve.1x2_pct", $"{p_information.count1x2 / totalCount,8:F2} %");
+            AppendMetric(p_box, "sieve.2x4_pct", $"{p_information.count2x4 / totalCount,8:F2} %");
+            AppendMetric(p_box, "sieve.4x6_pct", $"{p_information.count4x6 / totalCount,8:F2} %");
             AppendMetric(p_box, "weight.total_g", $"{p_information.measuredWeight,8:F2}");
 
             p_box.AppendText("--------------------------------------------------------------------------------\n");
