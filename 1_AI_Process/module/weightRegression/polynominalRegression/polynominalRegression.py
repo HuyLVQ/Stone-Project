@@ -1,13 +1,15 @@
 import joblib
 import numpy as np
 from pathlib import Path
-
+import pandas as pd
 
 def createPolynomial(p_X):
-    n_samples, n_features = p_X.shape
+
+    if isinstance(p_X, pd.DataFrame):
+        p_X = p_X.to_numpy()
+
     XPoly = p_X.copy()
-    # print(f'Số mẫu: {n_samples}\nSố biến: {n_features}')
-    #mi_sang
+
     XPoly = np.c_[XPoly, p_X[:, 0] * p_X[:, 4]]
     XPoly = np.c_[XPoly, p_X[:, 0] * p_X[:, 8]]
     XPoly = np.c_[XPoly, p_X[:, 4] * p_X[:, 8]]

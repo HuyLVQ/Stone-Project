@@ -90,13 +90,13 @@ class YOLOImpl():
                     widthInCM = round(widthPixel * p_ratioScale, 2)  
                     areaInCM2 = round(areaPixel * areaScale, 2)   
                     
-                    if widthInCM < 10 or lengthInCM < 10:
+                    if widthInCM < 1 or lengthInCM < 1:
                         rockType = "MiSang"
-                    elif (lengthInCM < 20 or widthInCM < 20) and lengthInCM >= 10 and widthInCM >= 10:
+                    elif (lengthInCM < 2 or widthInCM < 2) and lengthInCM >= 1 and widthInCM >= 1:
                         rockType = "1x2"
-                    elif (lengthInCM < 40 or widthInCM < 40) and lengthInCM >= 20 and widthInCM >= 20:
+                    elif (lengthInCM < 4 or widthInCM < 4) and lengthInCM >= 2 and widthInCM >= 2:
                         rockType = "2x4"
-                    elif 40 <= lengthInCM and 40 <= widthInCM:
+                    elif 4 <= lengthInCM and 4 <= widthInCM:
                         rockType = "4x6"
                     else:
                         rockType = "Khac"
@@ -168,17 +168,17 @@ class YOLOImpl():
                         _, dimensions, _ = rect
                         width, height = dimensions
 
-                        lengthInCM = max(width, height) / p_ratioScale
-                        widthInCM = min(width, height) / p_ratioScale
+                        lengthInCM = max(width, height) * p_ratioScale
+                        widthInCM = min(width, height) * p_ratioScale
                         rockType = ""
                         
-                        if widthInCM < 10 or lengthInCM < 10:
+                        if widthInCM < 1 or lengthInCM < 1:
                             rockType = concernedRockType[0]
-                        elif (lengthInCM < 20 or widthInCM < 20) and lengthInCM >= 10 and widthInCM >= 10:
+                        elif (lengthInCM < 2 or widthInCM < 2) and lengthInCM >= 1 and widthInCM >= 1:
                             rockType = concernedRockType[1]
-                        elif (lengthInCM < 40 or widthInCM < 40) and lengthInCM >= 20 and widthInCM >= 20:
+                        elif (lengthInCM < 4 or widthInCM < 4) and lengthInCM >= 2 and widthInCM >= 2:
                             rockType = concernedRockType[2]
-                        elif 40 <= lengthInCM and 40 <= widthInCM:
+                        elif 4 <= lengthInCM and 4 <= widthInCM:
                             rockType = concernedRockType[3]
                         else:
                             rockType = concernedRockType[4]

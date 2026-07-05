@@ -89,11 +89,15 @@ namespace Stone_Application.Forms
             p_box.AppendText($" | Measurement snapshot received | event_id={eventId:D6}\n");
 
             Int64 totalCount = p_information.countMiSang + p_information.count1x2 + p_information.count2x4 + p_information.count4x6;
+            float miSangPct = totalCount > 0 ? (float)p_information.countMiSang / totalCount * 100 : 0;
+            float p1x2Pct = totalCount > 0 ? (float)p_information.count1x2 / totalCount * 100 : 0;   
+            float p2x4Pct = totalCount > 0 ? (float)p_information.count2x4 / totalCount * 100 : 0;
+            float p4x6Pct = totalCount > 0 ? (float)p_information.count4x6 / totalCount * 100 : 0;
 
-            AppendMetric(p_box, "sieve.misang_pct", $"{p_information.countMiSang / totalCount,8:F2} %");
-            AppendMetric(p_box, "sieve.1x2_pct", $"{p_information.count1x2 / totalCount,8:F2} %");
-            AppendMetric(p_box, "sieve.2x4_pct", $"{p_information.count2x4 / totalCount,8:F2} %");
-            AppendMetric(p_box, "sieve.4x6_pct", $"{p_information.count4x6 / totalCount,8:F2} %");
+            AppendMetric(p_box, "sieve.misang_pct", $"{miSangPct,8:F2} %");
+            AppendMetric(p_box, "sieve.1x2_pct", $"{p1x2Pct,8:F2} %");
+            AppendMetric(p_box, "sieve.2x4_pct", $"{p2x4Pct,8:F2} %");
+            AppendMetric(p_box, "sieve.4x6_pct", $"{p4x6Pct,8:F2} %");
             AppendMetric(p_box, "weight.total_g", $"{p_information.measuredWeight,8:F2}");
 
             p_box.AppendText("--------------------------------------------------------------------------------\n");
