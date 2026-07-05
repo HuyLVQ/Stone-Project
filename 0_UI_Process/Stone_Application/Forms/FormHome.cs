@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -44,6 +45,61 @@ namespace Stone_Application.Forms
                 if (s_instance.pictureBox.Image != null) s_instance.pictureBox.Image.Dispose();
                 s_instance.pictureBox.Image = (Bitmap)p_bmp.Clone();
             }
+        }
+
+        public static void enableStreaming()
+        {
+            s_instance?.Invoke(new Action(() =>
+            {
+                s_instance.m_startButton.Enabled = false;
+                s_instance.m_startButton.ForeColor = System.Drawing.SystemColors.ActiveBorder;
+
+                s_instance.m_stopButton.Enabled = true;
+                s_instance.m_stopButton.ForeColor = System.Drawing.SystemColors.ControlText;
+
+                lock(Common.s_lockState)
+                {
+                    Common.s_currentState = Common.currentState.READY;
+                }
+            }));
+
+        }
+
+        public static void disableStreaming()
+        {
+            s_instance?.Invoke(new Action(() =>
+            {
+                s_instance.m_startButton.Enabled = true;
+                s_instance.m_startButton.ForeColor = System.Drawing.SystemColors.ControlText;
+
+                s_instance.m_stopButton.Enabled = false;
+                s_instance.m_stopButton.ForeColor = System.Drawing.SystemColors.ActiveBorder;
+
+                lock (Common.s_lockState)
+                {
+                    Common.s_currentState = Common.currentState.READY;
+                }
+            }));
+        }
+
+        private void startButtonClick(object sender, EventArgs e)
+        {
+            enableStreaming();
+            lock (Common.s_lockState)
+            {
+                Common.s_currentState = Common.currentState.STREAMING;
+            }
+        }
+
+        private void stopButtonClick(object sender, EventArgs e)
+        {
+            disableStreaming();
+            lock (Common.s_lockState)
+            {
+                Common.s_currentState = Common.currentState.READY;
+            }
+
+            Common.s_imageQueue = new BlockingCollection<Stone_Application.Event.IImage>(new ConcurrentQueue<Stone_Application.Event.IImage>(), Config.BUFFER_BOUND);
         }
     }
 }

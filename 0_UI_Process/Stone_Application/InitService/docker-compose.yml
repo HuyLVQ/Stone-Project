@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  postgres:
+    image: postgres:13
+    container_name: measurements_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: measurements_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - measurements_pgdata:/var/lib/postgresql/data
+
+volumes:
+  measurements_pgdata:

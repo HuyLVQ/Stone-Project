@@ -19,6 +19,7 @@ namespace Stone_Application
         private bool m_isDraggingWindow;
         private Point m_dragCursorPoint;
         private Point m_dragFormPoint;
+        private bool m_cleanupStarted;
 
 
 
@@ -128,7 +129,31 @@ namespace Stone_Application
             this.m_buttonLog.BackColor = ColorTranslator.FromHtml("#4B164C");
             this.m_buttonSettings.BackColor = ColorTranslator.FromHtml("#4B164C");
 
-            Application.Exit();
+            Close();
+        }
+
+        private void CleanupApplicationResources()
+        {
+            if (this.m_cleanupStarted)
+                return;
+
+            this.m_cleanupStarted = true;
+
+            RunCleanupAction("threads", Infrastructure.MultiThread.StopAll);
+            RunCleanupAction("application resources", FormSettings.CleanupAllResources);
+            RunCleanupAction("Docker services", InitService.DisposeService.cleanupService);
+        }
+
+        private static void RunCleanupAction(string p_resourceName, Action p_cleanupAction)
+        {
+            try
+            {
+                p_cleanupAction();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] Failed to cleanup {p_resourceName}: {ex.Message}");
+            }
         }
 
         private void buttonWindowMinimizeClick(object p_sender, EventArgs p_e)
@@ -178,6 +203,20 @@ namespace Stone_Application
         {
             base.OnResize(p_e);
             UpdateExpandButtonText();
+        }
+
+        protected override void OnShown(EventArgs p_e)
+        {
+            base.OnShown(p_e);
+            this.m_panelHighlight.Height = this.m_buttonHome.Height;
+            this.m_panelHighlight.Top = this.m_buttonHome.Top;
+            this.m_panelHighlight.Left = this.m_buttonHome.Left;
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs p_e)
+        {
+            CleanupApplicationResources();
+            base.OnFormClosing(p_e);
         }
 
         protected override bool ProcessCmdKey(ref Message p_msg, Keys p_keyData)

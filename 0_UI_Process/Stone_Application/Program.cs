@@ -16,7 +16,9 @@ namespace Stone_Application
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            InitService.PostgreSQLInit.PostgreSQLInitSrv();
             Application.Run(new MainForm());
+
         }
     }
 }

@@ -88,10 +88,16 @@ namespace Stone_Application.Forms
             AppendColoredText(p_box, $"{LOG_COMPONENT_NAME,-10}", Color.MediumPurple, true);
             p_box.AppendText($" | Measurement snapshot received | event_id={eventId:D6}\n");
 
-            AppendMetric(p_box, "sieve.misang_pct", $"{p_information.deltaPerctMiSang,8:F2} %");
-            AppendMetric(p_box, "sieve.1x2_pct", $"{p_information.deltaPerct1x2,8:F2} %");
-            AppendMetric(p_box, "sieve.2x4_pct", $"{p_information.deltaPerct2x4,8:F2} %");
-            AppendMetric(p_box, "sieve.4x6_pct", $"{p_information.deltaPerct4x6,8:F2} %");
+            Int64 totalCount = p_information.countMiSang + p_information.count1x2 + p_information.count2x4 + p_information.count4x6;
+            float miSangPct = totalCount > 0 ? (float)p_information.countMiSang / totalCount * 100 : 0;
+            float p1x2Pct = totalCount > 0 ? (float)p_information.count1x2 / totalCount * 100 : 0;   
+            float p2x4Pct = totalCount > 0 ? (float)p_information.count2x4 / totalCount * 100 : 0;
+            float p4x6Pct = totalCount > 0 ? (float)p_information.count4x6 / totalCount * 100 : 0;
+
+            AppendMetric(p_box, "sieve.misang_pct", $"{miSangPct,8:F2} %");
+            AppendMetric(p_box, "sieve.1x2_pct", $"{p1x2Pct,8:F2} %");
+            AppendMetric(p_box, "sieve.2x4_pct", $"{p2x4Pct,8:F2} %");
+            AppendMetric(p_box, "sieve.4x6_pct", $"{p4x6Pct,8:F2} %");
             AppendMetric(p_box, "weight.total_g", $"{p_information.measuredWeight,8:F2}");
 
             p_box.AppendText("--------------------------------------------------------------------------------\n");
@@ -106,6 +112,12 @@ namespace Stone_Application.Forms
 
             s_instance.BeginInvoke(new Action(() =>
             {
+                if (s_instance.textBoxLogging.Text.Length == 0)
+                {
+                    s_instance.m_buttonExportPDF.Enabled = true;
+                    s_instance.m_buttonExportPDF.ForeColor = System.Drawing.SystemColors.ControlText;
+                }
+
                 AppendLogEntry(s_instance.textBoxLogging, p_information);
 
                 s_instance.textBoxLogging.SelectionStart =
@@ -119,6 +131,7 @@ namespace Stone_Application.Forms
         {
             string startTime = Common.s_repositoryInstance.getStartTime();
             string currentTime = Common.s_repositoryInstance.getLatestTime();
+            IResultInformation totalResult = Common.s_repositoryInstance.getTotal();
 
             if (startTime == null || currentTime == null)
             {
@@ -132,14 +145,12 @@ namespace Stone_Application.Forms
                 p_outputFilePath: outputFile,
                 p_startTime: startTime,
                 p_totalTime: currentTime,
-                p_loadcellRecord: Common.s_repositoryInstance.getTotal().measuredWeight,
-                p_realRecord: 0,
-                p_deviation: 0,
-                p_isOk: false,
-                p_perctMisang: Common.s_repositoryInstance.getTotal().deltaPerctMiSang,
-                p_perct1x2: Common.s_repositoryInstance.getTotal().deltaPerct1x2,
-                p_perct2x4: Common.s_repositoryInstance.getTotal().deltaPerct2x4,
-                p_perct4x6: Common.s_repositoryInstance.getTotal().deltaPerct4x6
+                p_loadcellRecord: float.Parse(s_instance.userInputTextBox.Text.Length > 0 ? s_instance.userInputTextBox.Text : "0.0", CultureInfo.InvariantCulture),
+                p_realRecord: totalResult.resultWeight,
+                p_perctMisang: totalResult.resultPerctMiSang,
+                p_perct1x2: totalResult.resultPerct1x2,
+                p_perct2x4: totalResult.resultPerct2x4,
+                p_perct4x6: totalResult.resultPerct4x6
             );
 
             this.Invoke(new Action(() =>

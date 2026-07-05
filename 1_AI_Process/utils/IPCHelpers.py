@@ -78,28 +78,28 @@ class IPCHelper():
             if (p_classificationCount is not None):
                 measuredMiSang = p_classificationCount.get(self.m_concernedRockTypes[0], 0)
                 self.m_hmap.seek(READ_OFFSET)
-                self.m_hmap.write(struct.pack('f', measuredMiSang))
+                self.m_hmap.write(struct.pack('<q', measuredMiSang))
                 
                 measured1x2 = p_classificationCount.get(self.m_concernedRockTypes[1], 0)
-                self.m_hmap.seek(READ_OFFSET + 4)
-                self.m_hmap.write(struct.pack('f', measured1x2))
+                self.m_hmap.seek(READ_OFFSET + 8)
+                self.m_hmap.write(struct.pack('<q', measured1x2))
             
                 measured2x4 = p_classificationCount.get(self.m_concernedRockTypes[2], 0)
-                self.m_hmap.seek(READ_OFFSET + 8)
-                self.m_hmap.write(struct.pack('f', measured2x4))
+                self.m_hmap.seek(READ_OFFSET + 16)
+                self.m_hmap.write(struct.pack('<q', measured2x4))
                 
                 measured4x6 = p_classificationCount.get(self.m_concernedRockTypes[3], 0)
-                self.m_hmap.seek(READ_OFFSET + 12)
-                self.m_hmap.write(struct.pack('f', measured4x6))
+                self.m_hmap.seek(READ_OFFSET + 24)
+                self.m_hmap.write(struct.pack('<q', measured4x6))
                 print(f"[INFO] MiSang: {measuredMiSang}   ||   1x2: {measured1x2}   ||   2x4: {measured2x4}   ||   4x6: {measured4x6}", flush=True)
             
             if (p_measuredWeight is not None):
-                self.m_hmap.seek(READ_OFFSET + 16)
-                self.m_hmap.write(struct.pack('f', p_measuredWeight))
+                self.m_hmap.seek(READ_OFFSET + 32)
+                self.m_hmap.write(struct.pack('<f', p_measuredWeight))
                 print(f"[INFO] Measured Weight: {p_measuredWeight}", flush=True)
             else:
-                self.m_hmap.seek(READ_OFFSET + 16)
-                self.m_hmap.write(struct.pack('f', 0))
+                self.m_hmap.seek(READ_OFFSET + 32)
+                self.m_hmap.write(struct.pack('<f', 0))
                 print(f"[INFO] Could not measured weight", flush=True)
 
 
