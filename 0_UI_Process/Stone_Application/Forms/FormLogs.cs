@@ -141,7 +141,7 @@ namespace Stone_Application.Forms
                 p_outputFilePath: outputFile,
                 p_startTime: startTime,
                 p_totalTime: currentTime,
-                p_loadcellRecord: float.Parse(s_instance.userInputTextBox.Text, CultureInfo.InvariantCulture),
+                p_loadcellRecord: float.Parse(s_instance.userInputTextBox.Text.Length > 0 ? s_instance.userInputTextBox.Text : "0.0", CultureInfo.InvariantCulture),
                 p_realRecord: totalResult.resultWeight,
                 p_perctMisang: totalResult.resultPerctMiSang,
                 p_perct1x2: totalResult.resultPerct1x2,
