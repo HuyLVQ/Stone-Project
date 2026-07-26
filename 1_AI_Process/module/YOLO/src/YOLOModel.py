@@ -21,7 +21,7 @@ class YOLOImpl():
         os.path.dirname(os.path.abspath(__file__)),
         "..",
         "weight",
-        "best260620.pt"
+        "best260719.pt"
     )
 
     m_weightsPath = os.path.abspath(m_weightsPath)
