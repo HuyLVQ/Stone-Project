@@ -53,4 +53,39 @@ public static class Common
         //public static IRepository<IInformation, IResultInformation> s_repositoryInstance = SQLServerRepository<IInformation, IResultInformation>.getIntance();
         public static IRepository<IInformation, IResultInformation> s_repositoryInstance = NoSQLRepository<IInformation, IResultInformation>.getIntance();
 
+        private static int s_currentSessionId;
+        private static bool s_sessionEntryPending;
+        private static readonly object s_lockSession = new object();
+
+        public static void StartPostgreSqlSession()
+        {
+            PostgreSqlRepository repository = s_repositoryInstance as PostgreSqlRepository;
+            if (repository == null)
+                return;
+
+            lock (s_lockSession)
+            {
+                s_currentSessionId = repository.BeginSession();
+                s_sessionEntryPending = true;
+            }
+        }
+
+        public static void PrepareInformationForPersistence(IInformation p_information)
+        {
+            if (!(s_repositoryInstance is PostgreSqlRepository))
+                return;
+
+            lock (s_lockSession)
+            {
+                p_information.sessionId = s_currentSessionId;
+                p_information.isStartOfSession = s_sessionEntryPending;
+                s_sessionEntryPending = false;
+            }
+        }
+
+        public static void ResetRepository()
+        {
+            s_repositoryInstance.reset();
+        }
+
 }

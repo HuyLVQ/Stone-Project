@@ -14,6 +14,12 @@ namespace Stone_Application.Event
         public Int64 count4x6 { get; set; }
 
         public float measuredWeight { get; set; }
+
+        // Populated by the PostgreSQL session lifecycle. These fields are
+        // persisted with every measurement so the first row of each run is
+        // an explicit accumulation boundary.
+        public bool isStartOfSession { get; set; }
+        public int sessionId { get; set; }
     }
 
     public class IResultInformation

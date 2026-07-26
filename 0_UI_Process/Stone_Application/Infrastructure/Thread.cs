@@ -104,9 +104,9 @@ namespace Stone_Application.Infrastructure
                 IEventObserver<Event.IImage> uiImageObserver = new UIImageObserver<Event.IImage>();
                 IEventObserver<IInformation> uiInformationObserver = new UIInformationObserver<IInformation>();
 
+                aiProcessEvent.attachInformationObserver(dbObserver);
                 aiProcessEvent.attachImageObserver(uiImageObserver);
                 aiProcessEvent.attachInformationObserver(uiInformationObserver);
-                aiProcessEvent.attachInformationObserver(dbObserver);
 
                 CancellationToken token = s_cancellationSource.Token;
 
