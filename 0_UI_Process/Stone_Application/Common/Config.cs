@@ -26,6 +26,7 @@ public static class Config
 
     public static readonly string s_templateDir = Path.Combine(s_rootPath, "0_UI_Process", "Stone_Application", "PDF_Reference");
     public static readonly string s_templatePath = Path.Combine(s_templateDir, "template.docx");
+    public static readonly string s_excelTemplatePath = Path.Combine(s_templateDir, "Reference.xlsx");
     public static readonly string s_outputPath = Path.Combine(s_templateDir, "Result_");
 
 

@@ -70,7 +70,7 @@ namespace Stone_Application.Forms
             this.m_buttonExportPDF.Name = "m_buttonExportPDF";
             this.m_buttonExportPDF.Size = new System.Drawing.Size(155, 37);
             this.m_buttonExportPDF.TabIndex = 1;
-            this.m_buttonExportPDF.Text = "Export PDF";
+            this.m_buttonExportPDF.Text = "Export Excel";
             this.m_buttonExportPDF.UseVisualStyleBackColor = true;
             this.m_buttonExportPDF.Click += new System.EventHandler(this.buttonExportPDFClick);
             // 

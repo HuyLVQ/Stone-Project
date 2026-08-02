@@ -141,6 +141,7 @@ namespace Stone_Application
 
             RunCleanupAction("threads", Infrastructure.MultiThread.StopAll);
             RunCleanupAction("application resources", FormSettings.CleanupAllResources);
+            RunCleanupAction("measurement database", Common.ResetRepository);
             RunCleanupAction("Docker services", InitService.DisposeService.cleanupService);
         }
 

@@ -16,6 +16,10 @@ namespace Stone_Application.Repository
 
         TResultInformation get(string p_startTime, string p_endTime);
 
+        // Returns the latest accumulated measurement for every sub-session.
+        // Exporters use this to produce one row per session.
+        List<TInformation> getSessionMeasurements();
+
         string getStartTime();
         string getLatestTime();
 
