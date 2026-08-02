@@ -67,11 +67,11 @@ namespace Stone_Application.Infrastructure
                                 //}
 
                                 Console.WriteLine("[INFO] [THREAD #1] Camera capture...");
-                                Common.camera.cameraCapture();
+                                Common.camera.cameraCapture(token);
                             }
                             // small delay to avoid busy spin if interval is very small
                             Thread.Sleep(1);
-                            Console.WriteLine("[INFO] [THREAD #1] Exiting thread.");
+                            //Console.WriteLine("[INFO] [THREAD #1] Exiting thread.");
                         }
                         catch (OperationCanceledException)
                         {

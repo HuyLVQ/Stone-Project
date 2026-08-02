@@ -100,7 +100,11 @@ namespace Stone_Application.Forms
                 Common.s_currentState = Common.currentState.READY;
             }
 
-            Common.s_imageQueue = new BlockingCollection<Stone_Application.Event.IImage>(new ConcurrentQueue<Stone_Application.Event.IImage>(), Config.BUFFER_BOUND);
+            //Common.s_imageQueue = new BlockingCollection<Stone_Application.Event.IImage>(new ConcurrentQueue<Stone_Application.Event.IImage>(), Config.BUFFER_BOUND);
+            while (Common.s_imageQueue.TryTake(out _))
+            {
+                ;
+            }
         }
     }
 }
