@@ -292,6 +292,41 @@ namespace Stone_Application.Repository
                 latestRecord.measuredWeight - oldestRecord.measuredWeight);
         }
 
+        public List<IInformation> getSessionMeasurements()
+        {
+            // Each database row is an accumulated snapshot. DISTINCT ON selects
+            // the newest snapshot for every session, yielding one export row per
+            // sub-session since the application began recording.
+            const string sql =
+                "SELECT DISTINCT ON (sessionId) sessionId, countMiSang, count1x2, count2x4, count4x6, measured_weight" +
+                " FROM " + m_TABLE_NAME +
+                " ORDER BY sessionId, recorded_at DESC;";
+
+            var measurements = new List<IInformation>();
+            using (var conn = new NpgsqlConnection(m_connectionString))
+            {
+                conn.Open();
+                using (var cmd = new NpgsqlCommand(sql, conn))
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        measurements.Add(new IInformation
+                        {
+                            sessionId = reader.GetInt32(0),
+                            countMiSang = reader.GetInt64(1),
+                            count1x2 = reader.GetInt64(2),
+                            count2x4 = reader.GetInt64(3),
+                            count4x6 = reader.GetInt64(4),
+                            measuredWeight = reader.GetFloat(5)
+                        });
+                    }
+                }
+            }
+
+            return measurements;
+        }
+
         private static IResultInformation CreateResult(
             float p_miSang,
             float p_1x2,

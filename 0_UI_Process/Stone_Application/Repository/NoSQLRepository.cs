@@ -7,7 +7,7 @@ using System.Linq;
 namespace Stone_Application.Repository
 {
     public class NoSQLRepository<TInformation, TResultInformation> : IRepository<TInformation, TResultInformation>
-        where TInformation : IInformation
+        where TInformation : IInformation, new()
         where TResultInformation : IResultInformation, new()
     {
         private static NoSQLRepository<TInformation, TResultInformation> s_instance;
@@ -119,6 +119,27 @@ namespace Stone_Application.Repository
                 latestRecord.count2x4 - oldestRecord.count2x4,
                 latestRecord.count4x6 - oldestRecord.count4x6,
                 latestRecord.measuredWeight - oldestRecord.measuredWeight);
+        }
+
+        List<TInformation> IRepository<TInformation, TResultInformation>.getSessionMeasurements()
+        {
+            lock (s_lock)
+            {
+                // The in-memory repository has one measurement per sub-session.
+                // Return copies so an exporter cannot mutate repository state.
+                return m_customNoSQL.Values
+                    .Select((p_information, p_index) => new TInformation
+                    {
+                        sessionId = p_information.sessionId > 0 ? p_information.sessionId : p_index + 1,
+                        countMiSang = p_information.countMiSang,
+                        count1x2 = p_information.count1x2,
+                        count2x4 = p_information.count2x4,
+                        count4x6 = p_information.count4x6,
+                        measuredWeight = p_information.measuredWeight,
+                        isStartOfSession = p_information.isStartOfSession
+                    })
+                    .ToList();
+            }
         }
 
         string IRepository<TInformation, TResultInformation>.getStartTime()

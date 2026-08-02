@@ -132,33 +132,25 @@ namespace Stone_Application.Forms
 
         private void buttonExportPDFClick(object p_sender, EventArgs p_e)
         {
-            string startTime = Common.s_repositoryInstance.getStartTime();
-            string currentTime = Common.s_repositoryInstance.getLatestTime();
-            IResultInformation totalResult = Common.s_repositoryInstance.getTotal();
-
-            if (startTime == null || currentTime == null)
+            var measurements = Common.s_repositoryInstance.getSessionMeasurements();
+            if (measurements.Count == 0)
             {
-                MessageBox.Show("No data to export.", "Export PDF", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("No data to export.", "Export Excel", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            string outputFile = Config.s_outputPath + currentTime + ".docx";
+            string outputFile = Config.s_outputPath + DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture) + ".xlsx";
+            IResultExport exporter = new ExcelExport();
 
-            PDFExportcs.ExportFile(
-                p_outputFilePath: outputFile,
-                p_startTime: startTime,
-                p_totalTime: currentTime,
-                p_loadcellRecord: float.Parse(s_instance.userInputTextBox.Text.Length > 0 ? s_instance.userInputTextBox.Text : "0.0", CultureInfo.InvariantCulture),
-                p_realRecord: totalResult.resultWeight,
-                p_perctMisang: totalResult.resultPerctMiSang,
-                p_perct1x2: totalResult.resultPerct1x2,
-                p_perct2x4: totalResult.resultPerct2x4,
-                p_perct4x6: totalResult.resultPerct4x6
-            );
+            if (!exporter.ExportFile(outputFile, measurements))
+            {
+                MessageBox.Show("Excel export failed.", "Export Excel", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
             this.Invoke(new Action(() =>
             {
-                MessageBox.Show("Export successful to" + outputFile, "Export PDF", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Export successful to " + outputFile, "Export Excel", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }));
         }
     }

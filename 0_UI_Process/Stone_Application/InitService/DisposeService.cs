@@ -11,7 +11,7 @@ namespace Stone_Application.InitService
         {
             try
             {
-                CommandResult result = RunDockerCommand("compose down", FindComposeDirectory());
+                CommandResult result = RunDockerCommand("compose down -v", FindComposeDirectory());
                 WriteCommandOutput(result);
 
                 if (result.ExitCode == 0)
