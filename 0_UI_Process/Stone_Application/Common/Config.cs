@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 public static class Config
 {
-    public const bool s_isDebugMode = true;
+    public const bool s_isDebugMode = false;
 
     public const int EXPOSURE_TIME = 5_000;
     public const int TIME_INTERVAL = 880;

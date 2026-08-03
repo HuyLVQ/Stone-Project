@@ -32,8 +32,8 @@ def main():
         # imgResult, counts, measuredWeight = AIModel.processAndVisualizeWithWeight(inferenceResult, None, retrievedImgBytes, predictXGBoost)
         # IPCInst.taskRead(imgResult, counts, measuredWeight)
         
-        imgResult, counts, measuredWeights = AIModel.processAndVisualizeWithWeight(inferenceResult, None, retrievedImgBytes)
-        IPCInst.taskRead(imgResult, counts, measuredWeights)
+        imgResult, counts, measuredWeights = AIModel.processAndVisualizeWithMultipleWeight(inferenceResult, None, retrievedImgBytes)
+        IPCInst.taskReadMultiple(imgResult, counts, measuredWeights)
                 
         
 
