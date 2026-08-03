@@ -43,18 +43,20 @@ namespace Stone_Application.Repository
         private void EnsureTableExists()
         {
             string sql =
-                "CREATE TABLE IF NOT EXISTS " + m_TABLE_NAME + " (" +
-                "    id SERIAL PRIMARY KEY," +
-                "    countMiSang BIGINT NOT NULL," +
-                "    count1x2 BIGINT NOT NULL," +
-                "    count2x4 BIGINT NOT NULL," +
-                "    count4x6 BIGINT NOT NULL," +
-                "    measured_weight REAL NOT NULL," +
-                "    isStartOfSession BOOLEAN NOT NULL DEFAULT FALSE," +
-                "    sessionId INTEGER NOT NULL DEFAULT 0," +
-                "    recorded_at TIMESTAMP NOT NULL DEFAULT NOW()" +
-                ");";
-
+                    "CREATE TABLE IF NOT EXISTS " + m_TABLE_NAME + " (" +
+                    "    id SERIAL PRIMARY KEY," +
+                    "    countMiSang BIGINT NOT NULL," +
+                    "    count1x2 BIGINT NOT NULL," +
+                    "    count2x4 BIGINT NOT NULL," +
+                    "    count4x6 BIGINT NOT NULL," +
+                    "    measured_weight1 REAL NOT NULL," +
+                    "    measured_weight2 REAL NOT NULL," +
+                    "    measured_weight3 REAL NOT NULL," +
+                    "    measured_weight4 REAL NOT NULL," +
+                    "    isStartOfSession BOOLEAN NOT NULL DEFAULT FALSE," +
+                    "    sessionId INTEGER NOT NULL DEFAULT 0," +
+                    "    recorded_at TIMESTAMP NOT NULL DEFAULT NOW()" +
+                    ");";
             using (var conn = new NpgsqlConnection(m_connectionString))
             {
                 conn.Open();
@@ -68,7 +70,11 @@ namespace Stone_Application.Repository
                         "ALTER TABLE " + m_TABLE_NAME +
                         " ADD COLUMN IF NOT EXISTS isStartOfSession BOOLEAN NOT NULL DEFAULT FALSE;" +
                         " ALTER TABLE " + m_TABLE_NAME +
-                        " ADD COLUMN IF NOT EXISTS sessionId INTEGER NOT NULL DEFAULT 0;", conn))
+                        " ADD COLUMN IF NOT EXISTS sessionId INTEGER NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight1 REAL NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight2 REAL NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight3 REAL NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight4 REAL NOT NULL DEFAULT 0;", conn))
                     {
                         migrationCmd.ExecuteNonQuery();
                     }
@@ -114,13 +120,15 @@ namespace Stone_Application.Repository
                         lockCmd.ExecuteNonQuery();
                     }
 
+                    string insertSql;
                     if (!p_entity.isStartOfSession)
-                    {
+                    {   
                         string selectSql =
-                            "SELECT countMiSang, count1x2, count2x4, count4x6, measured_weight" +
-                            " FROM " + m_TABLE_NAME +
-                            " WHERE sessionId = @sessionId" +
-                            " ORDER BY recorded_at DESC LIMIT 1;";
+                                "SELECT countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4" +
+                                " FROM " + m_TABLE_NAME +
+                                " WHERE sessionId = @sessionId" +
+                                " ORDER BY recorded_at DESC LIMIT 1;";
+                        
 
                         using (var selectCmd = new NpgsqlCommand(selectSql, conn, transaction))
                         {
@@ -133,17 +141,21 @@ namespace Stone_Application.Repository
                                     p_entity.count1x2 += reader.GetInt64(1);
                                     p_entity.count2x4 += reader.GetInt64(2);
                                     p_entity.count4x6 += reader.GetInt64(3);
-                                    p_entity.measuredWeight += reader.GetFloat(4);
+                                    p_entity.measuredWeight1 += reader.GetFloat(4);
+                                    p_entity.measuredWeight2 += reader.GetFloat(5);
+                                    p_entity.measuredWeight3 += reader.GetFloat(6);
+                                    p_entity.measuredWeight4 += reader.GetFloat(7);
                                 }
                             }
                         }
                     }
 
-                    string insertSql =
+                    insertSql =
                         "INSERT INTO " + m_TABLE_NAME +
-                        "    (countMiSang, count1x2, count2x4, count4x6, measured_weight, isStartOfSession, sessionId, recorded_at)" +
+                        "    (countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4, isStartOfSession, sessionId, recorded_at)" +
                         " VALUES" +
-                        "    (@miSang, @p1x2, @p2x4, @p4x6, @weight, @isStart, @sessionId, NOW());";
+                        "    (@miSang, @p1x2, @p2x4, @p4x6, @weight1, @weight2, @weight3, @weight4, @isStart, @sessionId, NOW());";
+                    
 
                     using (var insertCmd = new NpgsqlCommand(insertSql, conn, transaction))
                     {
@@ -151,7 +163,10 @@ namespace Stone_Application.Repository
                         insertCmd.Parameters.AddWithValue("p1x2", p_entity.count1x2);
                         insertCmd.Parameters.AddWithValue("p2x4", p_entity.count2x4);
                         insertCmd.Parameters.AddWithValue("p4x6", p_entity.count4x6);
-                        insertCmd.Parameters.AddWithValue("weight", p_entity.measuredWeight);
+                        insertCmd.Parameters.AddWithValue("weight1", p_entity.measuredWeight1);
+                        insertCmd.Parameters.AddWithValue("weight2", p_entity.measuredWeight2);
+                        insertCmd.Parameters.AddWithValue("weight3", p_entity.measuredWeight3);
+                        insertCmd.Parameters.AddWithValue("weight4", p_entity.measuredWeight4);
                         insertCmd.Parameters.AddWithValue("isStart", p_entity.isStartOfSession);
                         insertCmd.Parameters.AddWithValue("sessionId", p_entity.sessionId);
                         insertCmd.ExecuteNonQuery();
@@ -161,40 +176,20 @@ namespace Stone_Application.Repository
                 }
             }
 
-            Console.WriteLine("[INFO] [REPOSITORY] [ADD] New record has been added");
+            if (Config.s_isDebugMode)
+                Console.WriteLine("[INFO] [REPOSITORY] [ADD] New record has been added");
             }
         }
 
         public void update(IInformation p_entity)
         {
-            //string sql =
-            //    "UPDATE " + m_TABLE_NAME +
-            //    " SET countMiSang = @miSang," +
-            //    "     count1x2 = @p1x2," +
-            //    "     count2x4 = @p2x4," +
-            //    "     count4x6 = @p4x6," +
-            //    "     measured_weight = @weight" +
-            //    " WHERE id = (SELECT id FROM " + m_TABLE_NAME + " ORDER BY recorded_at DESC LIMIT 1);";
-
-            //using (var conn = new NpgsqlConnection(_connectionString))
-            //{
-            //    conn.Open();
-            //    using (var cmd = new NpgsqlCommand(sql, conn))
-            //    {
-            //        cmd.Parameters.AddWithValue("miSang", p_entity.countMiSang);
-            //        cmd.Parameters.AddWithValue("p1x2", p_entity.count1x2);
-            //        cmd.Parameters.AddWithValue("p2x4", p_entity.count2x4);
-            //        cmd.Parameters.AddWithValue("p4x6", p_entity.count4x6);
-            //        cmd.Parameters.AddWithValue("weight", p_entity.measuredWeight);
-            //        cmd.ExecuteNonQuery();
-            //    }
-            //}
+            ;
         }
 
         public IResultInformation getTotal()
         {
             string sql =
-                "SELECT countMiSang, count1x2, count2x4, count4x6, measured_weight" +
+                "SELECT countMiSang, count1x2, count2x4, count4x6, measured_weight1" +
                 " FROM " + m_TABLE_NAME +
                 " ORDER BY recorded_at DESC LIMIT 1;";
 
@@ -242,7 +237,7 @@ namespace Stone_Application.Repository
             DateTime endTime = DateTime.Parse(p_endTime, CultureInfo.InvariantCulture);
 
             string sql =
-                "SELECT countMiSang, count1x2, count2x4, count4x6, measured_weight" +
+                "SELECT countMiSang, count1x2, count2x4, count4x6, measured_weight1" +
                 " FROM " + m_TABLE_NAME +
                 " WHERE recorded_at >= @startTime AND recorded_at <= @endTime" +
                 " ORDER BY recorded_at ASC;";
@@ -267,7 +262,7 @@ namespace Stone_Application.Repository
                                 count1x2 = reader.GetInt64(1),
                                 count2x4 = reader.GetInt64(2),
                                 count4x6 = reader.GetInt64(3),
-                                measuredWeight = reader.GetFloat(4)
+                            measuredWeight1 = reader.GetFloat(4)
                             });
                         }
                     }
@@ -298,10 +293,10 @@ namespace Stone_Application.Repository
             // Each database row is an accumulated snapshot. DISTINCT ON selects
             // the newest snapshot for every session, yielding one export row per
             // sub-session since the application began recording.
-            const string sql =
-                "SELECT DISTINCT ON (sessionId) sessionId, countMiSang, count1x2, count2x4, count4x6, measured_weight" +
-                " FROM " + m_TABLE_NAME +
-                " ORDER BY sessionId, recorded_at DESC;";
+            string sql =
+                    "SELECT DISTINCT ON (sessionId) sessionId, countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4" +
+                    " FROM " + m_TABLE_NAME +
+                    " ORDER BY sessionId, recorded_at DESC;";
 
             var measurements = new List<IInformation>();
             using (var conn = new NpgsqlConnection(m_connectionString))
@@ -319,7 +314,10 @@ namespace Stone_Application.Repository
                             count1x2 = reader.GetInt64(2),
                             count2x4 = reader.GetInt64(3),
                             count4x6 = reader.GetInt64(4),
-                            measuredWeight = reader.GetFloat(5)
+                            measuredWeight1 = reader.GetFloat(5),
+                            measuredWeight2 = Config.s_isDebugMode ? reader.GetFloat(6) : 0.0f,
+                            measuredWeight3 = Config.s_isDebugMode ? reader.GetFloat(7) : 0.0f,
+                            measuredWeight4 = Config.s_isDebugMode ? reader.GetFloat(8) : 0.0f
                         });
                     }
                 }

@@ -92,7 +92,10 @@ namespace Stone_Application.IPC
                     Int64 delta_perct_1_2 = reader.ReadInt64();
                     Int64 delta_perct_2_4 = reader.ReadInt64();
                     Int64 delta_perct_4_6 = reader.ReadInt64();
-                    float measured_weight = reader.ReadSingle();
+                    float measured_weight1 = reader.ReadSingle();
+                    float measured_weight2 = Config.s_isDebugMode ? reader.ReadSingle() : 0.0f;
+                    float measured_weight3 = Config.s_isDebugMode ? reader.ReadSingle() : 0.0f;
+                    float measured_weight4 = Config.s_isDebugMode ? reader.ReadSingle() : 0.0f;
 
                     stream.Seek(Config.OFFSET_IMAGE, SeekOrigin.Begin);
                     byte[] image_data = reader.ReadBytes(Config.IMAGE_HEIGHT * Config.IMAGE_WIDTH * 3);
@@ -103,7 +106,10 @@ namespace Stone_Application.IPC
                         count1x2 = delta_perct_1_2,
                         count2x4 = delta_perct_2_4,
                         count4x6 = delta_perct_4_6,
-                        measuredWeight = measured_weight
+                        measuredWeight1 = measured_weight1,
+                        measuredWeight2 = measured_weight2,
+                        measuredWeight3 = measured_weight3,
+                        measuredWeight4 = measured_weight4
                     };
 
                     IImage image = new IImage

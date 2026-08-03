@@ -46,7 +46,9 @@ namespace Stone_Application.Infrastructure
                             {
                                 if (Common.s_currentState != Common.currentState.STREAMING)
                                 {
-                                    Console.WriteLine("[INFO] [THREAD #1] Not in streamin mode, go to sleep...");
+                                    if (Config.s_isDebugMode == true) {
+                                        Console.WriteLine("[INFO] [THREAD #1] Not in streamin mode, go to sleep...");
+                                    }
                                     Thread.Sleep(100);
                                     continue;
                                 }
@@ -56,17 +58,11 @@ namespace Stone_Application.Infrastructure
                             {
                                 Common.s_stopWatchMain.Restart();
 
-                                Console.WriteLine("[INFO] [THREAD #1] New Thread 1 cycle...");
+                                if (Config.s_isDebugMode == true) {
+                                    Console.WriteLine("[INFO] [THREAD #1] New Thread 1 cycle...");
+                                    Console.WriteLine("[INFO] [THREAD #1] Camera capture...");
+                                }
 
-                                //lock (Common.s_lockModbus)
-                                //{
-                                //    temporaryStorage = Common.modbusClient.ReadHoldingRegisters(Config.ENC_ADDR, 2);
-                                //    encoderFeedback = ((temporaryStorage[0] & 0xFFFF) | (temporaryStorage[1] << 16));
-                                //    Console.WriteLine("[INFO] [THREAD #1] [MODBUS] Modbus read...");
-                                //    System.Threading.Monitor.PulseAll(Common.s_lockModbus);
-                                //}
-
-                                Console.WriteLine("[INFO] [THREAD #1] Camera capture...");
                                 Common.camera.cameraCapture(token);
                             }
                             // small delay to avoid busy spin if interval is very small
@@ -115,8 +111,10 @@ namespace Stone_Application.Infrastructure
                     try
                     {
                         while (!token.IsCancellationRequested)
-                        {
-                            Console.WriteLine("[INFO] [THREAD #2] New Thread 2 cycle...");
+                        {   
+                            if (Config.s_isDebugMode == true) {
+                                Console.WriteLine("[INFO] [THREAD #2] New Thread 2 cycle...");
+                            }
 
                             Event.IImage temporaryImage;
                             try
@@ -129,7 +127,10 @@ namespace Stone_Application.Infrastructure
                                 break;
                             }
 
-                            Console.WriteLine("[INFO] [THREAD #2] Image taken from queue...");
+                            if (Config.s_isDebugMode == true) {
+                                Console.WriteLine("[INFO] [THREAD #2] Image taken from queue...");
+                            }
+
                             try
                             {
                                 ipcServices.writeTask(temporaryImage);
@@ -141,7 +142,10 @@ namespace Stone_Application.Infrastructure
                             }
 
                             Common.ui2aiEvent.Set();
-                            Console.WriteLine("[INFO] [THREAD #2] UI to AI event set...");
+
+                            if (Config.s_isDebugMode == true) {
+                                Console.WriteLine("[INFO] [THREAD #2] UI to AI event set...");
+                            }
 
                             // Wait for AI to respond, but allow periodic cancellation checks.
                             while (!token.IsCancellationRequested)
@@ -154,7 +158,9 @@ namespace Stone_Application.Infrastructure
                             if (token.IsCancellationRequested)
                                 break;
 
-                            Console.WriteLine("[INFO] [THREAD #2] AI to UI event received...");
+                            if (Config.s_isDebugMode == true) {
+                                Console.WriteLine("[INFO] [THREAD #2] AI to UI event received...");
+                            }
 
                             IInformation temporaryInformation;
                             try
@@ -167,7 +173,10 @@ namespace Stone_Application.Infrastructure
                                 continue;
                             }
 
-                            Console.WriteLine("[INFO] [THREAD #2] AI results read from shared memory...");
+                            if (Config.s_isDebugMode == true) {
+                                Console.WriteLine("[INFO] [THREAD #2] AI results read from shared memory...");
+                            }
+
                             aiProcessEvent.notifyImage(temporaryImage);
                             aiProcessEvent.notifyInformation(temporaryInformation);
                         }
@@ -181,7 +190,10 @@ namespace Stone_Application.Infrastructure
                         Console.WriteLine("[ERROR] [THREAD #2] Unexpected exception: " + ex.Message);
                     }
 
-                    Console.WriteLine("[INFO] [THREAD #2] Exiting thread.");
+                    if (Config.s_isDebugMode == true) {
+                        Console.WriteLine("[INFO] [THREAD #2] Exiting thread.");
+                    }
+                    
                 }, token);
             }
         }

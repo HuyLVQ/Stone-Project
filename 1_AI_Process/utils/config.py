@@ -4,6 +4,7 @@ MMF_TAGNAME = sys.argv[1]
 UI_2_AI_EVENT_TAGNAME = sys.argv[2] 
 AI_2_UI_EVENT_TAGNAME = sys.argv[3] 
 IMAGE_WIDTH, IMAGE_HEIGHT = int(sys.argv[4]), int(sys.argv[5])
+IS_DEBUG_MODE = len(sys.argv) > 6 and sys.argv[6].lower() == "true"
 
 WRITE_OFFSET = 0                                ## Offset value from the beginning address of shared memory region
 READ_OFFSET = 10_000_000                        ## Offset value from the beginning address of shared memory region

@@ -34,7 +34,9 @@ namespace Stone_Application.CameraClass
                     s_instance.m_camera.StreamGrabber.Start(GrabStrategy.LatestImages, GrabLoop.ProvidedByUser);
                     s_instance.m_camera.Parameters[PLCamera.AcquisitionStart].Execute();
 
-                    Console.WriteLine($"[INFO] [CAMERA] Camera initialized successfully");
+                    if (Config.s_isDebugMode) {
+                        Console.WriteLine($"[INFO] [CAMERA] Camera initialized successfully");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -75,7 +77,9 @@ namespace Stone_Application.CameraClass
 
                         Common.s_imageQueue.Add(imageData, p_cancellationToken);
 
-                        Console.WriteLine("[INFO] [CAMERA] Image is captured successfully");
+                        if (Config.s_isDebugMode) {
+                            Console.WriteLine("[INFO] [CAMERA] Image is captured successfully");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -97,7 +101,10 @@ namespace Stone_Application.CameraClass
                 s_instance.m_camera.Parameters[PLCamera.AcquisitionStop].Execute();
                 s_instance.m_camera.Close();
                 s_instance.m_camera.Dispose();
-                Console.WriteLine($"[INFO] [CAMERA] Camera is closed sucessully");
+
+                if (Config.s_isDebugMode) {
+                    Console.WriteLine($"[INFO] [CAMERA] Camera is closed sucessully");
+                }
             }
             catch (Exception ex)
             {

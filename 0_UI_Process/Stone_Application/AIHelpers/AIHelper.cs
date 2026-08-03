@@ -36,7 +36,8 @@ public sealed class AIHelper
                         $"\"{Config.UI_2_AI_EVENT_TAGNAME}\" " +
                         $"\"{Config.AI_2_UI_EVENT_TAGNAME}\" " +
                         $"\"{Config.IMAGE_WIDTH}\" " +
-                        $"\"{Config.IMAGE_HEIGHT}\" ",
+                        $"\"{Config.IMAGE_HEIGHT}\" " +
+                        $"\"{Config.s_isDebugMode}\" ",
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -50,7 +51,8 @@ public sealed class AIHelper
         Common.pythonProcess.OutputDataReceived += (p_s, p_outArgs) =>
         {
             if (p_outArgs.Data != null)
-                Console.WriteLine("[PY] " + p_outArgs.Data);
+                if (Config.s_isDebugMode)
+                    Console.WriteLine("[PY] " + p_outArgs.Data);
         };
 
         Common.pythonProcess.ErrorDataReceived += (p_s, p_errArgs) =>

@@ -12,7 +12,7 @@ import logging
 
 from utils.config import  MMF_TAGNAME, MMF_TIMEOUT, UI_2_AI_EVENT_TAGNAME, AI_2_UI_EVENT_TAGNAME, \
                           IMAGE_WIDTH, IMAGE_HEIGHT, \
-                          WRITE_OFFSET, READ_OFFSET, MEMORY_ALLOCATION, \
+                          WRITE_OFFSET, READ_OFFSET, MEMORY_ALLOCATION, IS_DEBUG_MODE, \
                           TYPE_COLORS
 
 class IPCHelper():
@@ -62,7 +62,8 @@ class IPCHelper():
                                         ).reshape((IMAGE_HEIGHT, IMAGE_WIDTH, 3))
                                                     
             logging.info(f"Retrieve image bytes from {MMF_TAGNAME} successfully")
-            print(f"[INFO]Retrieve image bytes from {MMF_TAGNAME} successfully", flush=True)
+            if IS_DEBUG_MODE:
+                print(f"[INFO]Retrieve image bytes from {MMF_TAGNAME} successfully", flush=True)
             return imageConvert
         except Exception as e:
             logging.warning(f"Failed to retrieve image bytes from {MMF_TAGNAME}: {e}")
@@ -73,7 +74,7 @@ class IPCHelper():
     def taskRead(self,
                  p_imgBytes: bytes,
                  p_classificationCount: dict,
-                 p_measuredWeight: float):
+                 p_measuredWeight):
         try:
             if (p_classificationCount is not None):
                 measuredMiSang = p_classificationCount.get(self.m_concernedRockTypes[0], 0)
@@ -91,16 +92,17 @@ class IPCHelper():
                 measured4x6 = p_classificationCount.get(self.m_concernedRockTypes[3], 0)
                 self.m_hmap.seek(READ_OFFSET + 24)
                 self.m_hmap.write(struct.pack('<q', measured4x6))
-                print(f"[INFO] MiSang: {measuredMiSang}   ||   1x2: {measured1x2}   ||   2x4: {measured2x4}   ||   4x6: {measured4x6}", flush=True)
+                if IS_DEBUG_MODE:
+                    print(f"[INFO] MiSang: {measuredMiSang}   ||   1x2: {measured1x2}   ||   2x4: {measured2x4}   ||   4x6: {measured4x6}", flush=True)
             
-            if (p_measuredWeight is not None):
-                self.m_hmap.seek(READ_OFFSET + 32)
-                self.m_hmap.write(struct.pack('<f', p_measuredWeight))
-                print(f"[INFO] Measured Weight: {p_measuredWeight}", flush=True)
-            else:
-                self.m_hmap.seek(READ_OFFSET + 32)
-                self.m_hmap.write(struct.pack('<f', 0))
-                print(f"[INFO] Could not measured weight", flush=True)
+            weights = list(p_measuredWeight) if isinstance(p_measuredWeight, (list, tuple)) else [p_measuredWeight]
+            weight_count = 4 if IS_DEBUG_MODE else 1
+            for index in range(weight_count):
+                measuredWeight = weights[index] if index < len(weights) else None
+                self.m_hmap.seek(READ_OFFSET + 32 + index * 4)
+                self.m_hmap.write(struct.pack('<f', measuredWeight if measuredWeight is not None else 0))
+                if IS_DEBUG_MODE:
+                    print(f"[INFO] Measured Weight {index + 1}: {measuredWeight}", flush=True)
 
 
             if (p_imgBytes is not None):
@@ -111,7 +113,63 @@ class IPCHelper():
             
             if (p_imgBytes is not None or p_classificationCount is not None or p_measuredWeight is not None):
                 logging.info(f"Sent image and parsed information to {MMF_TAGNAME} successfully")
-                print(f"[INFO]Sent image and parsed information to {MMF_TAGNAME} successfully", flush=True)
+                if IS_DEBUG_MODE:
+                    print(f"[INFO]Sent image and parsed information to {MMF_TAGNAME} successfully", flush=True)
+                
+                self.m_hmap.flush()
+        except Exception as e:
+            logging.warning(f"Failed to send image and parsed information to {MMF_TAGNAME}: {e}")
+            print(f"[WARN]Failed to send image and parsed information to {MMF_TAGNAME}: {e}", flush=True)
+
+        win32event.SetEvent(self.m_AI2UIEvent)
+        
+        
+    def taskReadMultiple(self,
+                         p_imgBytes: bytes,
+                         p_classificationCount: dict,
+                         p_measuredWeight: list[float]):
+        try:
+            if (p_classificationCount is not None):
+                measuredMiSang = p_classificationCount.get(self.m_concernedRockTypes[0], 0)
+                self.m_hmap.seek(READ_OFFSET)
+                self.m_hmap.write(struct.pack('<q', measuredMiSang))
+                
+                measured1x2 = p_classificationCount.get(self.m_concernedRockTypes[1], 0)
+                self.m_hmap.seek(READ_OFFSET + 8)
+                self.m_hmap.write(struct.pack('<q', measured1x2))
+            
+                measured2x4 = p_classificationCount.get(self.m_concernedRockTypes[2], 0)
+                self.m_hmap.seek(READ_OFFSET + 16)
+                self.m_hmap.write(struct.pack('<q', measured2x4))
+                
+                measured4x6 = p_classificationCount.get(self.m_concernedRockTypes[3], 0)
+                self.m_hmap.seek(READ_OFFSET + 24)
+                self.m_hmap.write(struct.pack('<q', measured4x6))
+                if IS_DEBUG_MODE:
+                    print(f"[INFO] MiSang: {measuredMiSang}   ||   1x2: {measured1x2}   ||   2x4: {measured2x4}   ||   4x6: {measured4x6}", flush=True)
+            
+            for index, measuredWeight in enumerate(p_measuredWeight):
+                if (measuredWeight is not None):
+                    self.m_hmap.seek(READ_OFFSET + 32 + index * 4)
+                    self.m_hmap.write(struct.pack('<f', measuredWeight))
+                    if IS_DEBUG_MODE:
+                        print(f"[INFO] Measured Weight {index}: {measuredWeight}", flush=True)
+                else:
+                    self.m_hmap.seek(READ_OFFSET + 32 + index * 4)
+                    self.m_hmap.write(struct.pack('<f', 0))
+                    print(f"[INFO] Could not measured weight", flush=True)
+
+
+            if (p_imgBytes is not None):
+                self.m_hmap.seek(READ_OFFSET + 100)
+                self.m_hmap.write(p_imgBytes)
+
+            
+            
+            if (p_imgBytes is not None or p_classificationCount is not None or p_measuredWeight is not None):
+                logging.info(f"Sent image and parsed information to {MMF_TAGNAME} successfully")
+                if IS_DEBUG_MODE:
+                    print(f"[INFO]Sent image and parsed information to {MMF_TAGNAME} successfully", flush=True)
                 
                 self.m_hmap.flush()
         except Exception as e:

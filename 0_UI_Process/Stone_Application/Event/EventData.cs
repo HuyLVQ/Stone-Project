@@ -13,7 +13,18 @@ namespace Stone_Application.Event
         public Int64 count2x4 { get; set; }
         public Int64 count4x6 { get; set; }
 
-        public float measuredWeight { get; set; }
+        public float measuredWeight1 { get; set; }
+        public float measuredWeight2 { get; set; }
+        public float measuredWeight3 { get; set; }
+        public float measuredWeight4 { get; set; }
+
+        // Compatibility alias for views and repositories that display the
+        // primary model result.
+        public float measuredWeight
+        {
+            get { return measuredWeight1; }
+            set { measuredWeight1 = value; }
+        }
 
         // Populated by the PostgreSQL session lifecycle. These fields are
         // persisted with every measurement so the first row of each run is
