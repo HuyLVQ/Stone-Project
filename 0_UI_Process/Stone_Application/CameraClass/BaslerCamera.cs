@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Basler.Pylon;
 
 namespace Stone_Application.CameraClass
@@ -43,7 +44,7 @@ namespace Stone_Application.CameraClass
             return s_instance;
         }
 
-        public void cameraCapture()
+        public void cameraCapture(CancellationToken p_cancellationToken)
         {
             IGrabResult result;
             try
@@ -72,7 +73,7 @@ namespace Stone_Application.CameraClass
 
                         m_converter.Convert(imageData.recvImage, result);
 
-                        Common.s_imageQueue.Add(imageData);
+                        Common.s_imageQueue.Add(imageData, p_cancellationToken);
 
                         Console.WriteLine("[INFO] [CAMERA] Image is captured successfully");
                     }

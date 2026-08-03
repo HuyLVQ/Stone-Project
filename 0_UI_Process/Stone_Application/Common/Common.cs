@@ -46,12 +46,13 @@ public static class Common
         public static EventWaitHandle ai2uiEvent { get; set; }
         
     
-        public static BlockingCollection<Stone_Application.Event.IInformation> s_informationQueue = new BlockingCollection<IInformation>(new ConcurrentQueue<Stone_Application.Event.IInformation>(), Config.BUFFER_BOUND);
-        public static BlockingCollection<Stone_Application.Event.IImage> s_imageQueue = new BlockingCollection<Stone_Application.Event.IImage>(new ConcurrentQueue<Stone_Application.Event.IImage>(), Config.BUFFER_BOUND);
+        public static readonly BlockingCollection<Stone_Application.Event.IInformation> s_informationQueue = new BlockingCollection<IInformation>(new ConcurrentQueue<Stone_Application.Event.IInformation>(), Config.BUFFER_BOUND);
+        public static readonly BlockingCollection<Stone_Application.Event.IImage> s_imageQueue = new BlockingCollection<Stone_Application.Event.IImage>(new ConcurrentQueue<Stone_Application.Event.IImage>(), Config.BUFFER_BOUND);
 
 
-        //public static IRepository<IInformation, IResultInformation> s_repositoryInstance = SQLServerRepository<IInformation, IResultInformation>.getIntance();
-        public static IRepository<IInformation, IResultInformation> s_repositoryInstance = NoSQLRepository<IInformation, IResultInformation>.getIntance();
+    //public static IRepository<IInformation, IResultInformation> s_repositoryInstance = SQLServerRepository<IInformation, IResultInformation>.getIntance();
+    //public static IRepository<IInformation, IResultInformation> s_repositoryInstance = NoSQLRepository<IInformation, IResultInformation>.getIntance();
+        public static IRepository<IInformation, IResultInformation> s_repositoryInstance;
 
         private static int s_currentSessionId;
         private static bool s_sessionEntryPending;

@@ -183,8 +183,8 @@ class YOLOImpl():
                         else:
                             rockType = concernedRockType[4]
                             
-                        totalAreaByRockType[rockType] += cv2.contourArea(contour) / (areaScale)
-                        totalPerimeterByRockType[rockType] += cv2.arcLength(contour, True) / p_ratioScale
+                        totalAreaByRockType[rockType] += cv2.contourArea(contour) * (areaScale)
+                        totalPerimeterByRockType[rockType] += cv2.arcLength(contour, True) * p_ratioScale
                         
                         
                         classificationCounts[rockType] += 1
@@ -221,6 +221,8 @@ class YOLOImpl():
                                                             totalPerimeterByRockType[concernedRockType[1]],
                                                             totalPerimeterByRockType[concernedRockType[2]],
                                                             totalPerimeterByRockType[concernedRockType[3]]]], columns = self.m_FEATURE_NAMES))
+        
+        print(measuredWeight)
                         
         return imgDraw.tobytes(), classificationCounts, measuredWeight
                         

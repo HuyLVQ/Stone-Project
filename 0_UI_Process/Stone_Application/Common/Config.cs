@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 public static class Config
 {
     public const int EXPOSURE_TIME = 5_000;
-    public const int TIME_INTERVAL = 1_000;
+    public const int TIME_INTERVAL = 880;
     public const int IMAGE_WIDTH = 1_920;                           // Image width of the camera
     public const int IMAGE_HEIGHT = 1_200;                          // Image height of the camera
 
