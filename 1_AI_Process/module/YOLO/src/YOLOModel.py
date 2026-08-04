@@ -17,7 +17,7 @@ from utils.config import RATIO_SCALE, TYPE_COLORS, IMAGE_HEIGHT, IMAGE_WIDTH, FE
 from module.weightRegression.linearRegression.linearRegression import predictLinear
 from module.weightRegression.polynominalRegression.polynominalRegression import predictPoly
 from module.weightRegression.randomForest.randomForest import predictRandomForest
-from module.weightRegression.XGBoost.XGBoost import predictXGBoost
+from module.weightRegression.XGBoost.XGBoost import predictXGBoost, predictXGBoost_v2
 
 
 class YOLOImpl():
@@ -307,7 +307,7 @@ class YOLOImpl():
 
 
         measuredWeightResults = []
-        for weightEvaluation in [predictLinear, predictPoly, predictRandomForest, predictXGBoost]:
+        for weightEvaluation in [predictPoly, predictRandomForest, predictXGBoost, predictXGBoost_v2]:
             measuredWeight = weightEvaluation(pd.DataFrame([[ classificationCounts[concernedRockType[0]],
                                                                 classificationCounts[concernedRockType[1]],
                                                                 classificationCounts[concernedRockType[2]],
