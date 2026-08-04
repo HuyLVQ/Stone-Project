@@ -84,6 +84,7 @@ namespace Stone_Application.Forms
 
         private void startButtonClick(object sender, EventArgs e)
         {
+            Common.StartPostgreSqlSession();
             enableStreaming();
             lock (Common.s_lockState)
             {

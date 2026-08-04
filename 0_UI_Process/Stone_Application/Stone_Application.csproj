@@ -227,6 +227,8 @@
     <Compile Include="Observers\DBObserver.cs" />
     <Compile Include="Observers\IEventObserver.cs" />
     <Compile Include="Observers\UIInformationObserver.cs" />
+    <Compile Include="PDFExport\ExcelExport.cs" />
+    <Compile Include="PDFExport\IResultExport.cs" />
     <Compile Include="PDFExport\PDFExportcs.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
