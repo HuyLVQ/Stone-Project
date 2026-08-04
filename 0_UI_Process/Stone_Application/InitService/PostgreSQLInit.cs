@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Stone_Application.Repository;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -12,11 +13,18 @@ namespace Stone_Application.InitService
         private const string m_DATABASE = "measurements_db";
         private const string m_USER = "postgres";
         private const int m_READY_TIMEOUT_SECONDS = 30;
+        private const int m_DOCKER_READY_TIMEOUT_SECONDS = 60;
 
         public static void PostgreSQLInitSrv()
         {
             try
             {
+                if (!EnsureDockerEngineReady())
+                {
+                    Console.WriteLine($"[ERROR] Failed to start Docker Engine.");
+                    return;
+                }
+
                 string composeDirectory = FindComposeDirectory();
 
                 CommandResult startResult = RunDockerCommand("compose up -d", composeDirectory);
@@ -39,6 +47,9 @@ namespace Stone_Application.InitService
             {
                 Console.WriteLine($"[ERROR] Failed to start PostgreSQL service: {ex.Message}");
             }
+
+            Common.s_repositoryInstance = new PostgreSqlRepository();
+            Console.WriteLine($"[INFO] SQL init successfully");
         }
 
         private static bool WaitForPostgreSqlReady()
@@ -58,6 +69,84 @@ namespace Stone_Application.InitService
             }
 
             return false;
+        }
+
+        private static bool EnsureDockerEngineReady()
+        {
+            CommandResult dockerInfoResult = TryRunDockerCommand("info", null);
+            if (dockerInfoResult != null && dockerInfoResult.ExitCode == 0)
+            {
+                Console.WriteLine("[INFO] Docker Desktop engine is already running.");
+                return true;
+            }
+
+            string dockerDesktopPath = FindDockerDesktopPath();
+            if (dockerDesktopPath == null)
+            {
+                Console.WriteLine("[ERROR] Docker Desktop executable was not found.");
+                return false;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = dockerDesktopPath,
+                    UseShellExecute = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                });
+                Console.WriteLine("[INFO] Docker Desktop is starting...");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] Could not start Docker Desktop: {ex.Message}");
+                return false;
+            }
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(m_DOCKER_READY_TIMEOUT_SECONDS);
+            while (DateTime.UtcNow < deadline)
+            {
+                dockerInfoResult = TryRunDockerCommand("info", null);
+                if (dockerInfoResult != null && dockerInfoResult.ExitCode == 0)
+                {
+                    Console.WriteLine("[INFO] Docker Desktop engine is ready.");
+                    return true;
+                }
+
+                Thread.Sleep(1000);
+            }
+
+            return false;
+        }
+
+        private static CommandResult TryRunDockerCommand(string p_arguments, string p_workingDirectory)
+        {
+            try
+            {
+                return RunDockerCommand(p_arguments, p_workingDirectory);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WARN] Docker command could not be executed: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static string FindDockerDesktopPath()
+        {
+            string[] candidatePaths =
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Docker", "Docker", "Docker Desktop.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Docker", "Docker", "Docker Desktop.exe")
+            };
+
+            foreach (string candidatePath in candidatePaths)
+            {
+                if (File.Exists(candidatePath))
+                    return candidatePath;
+            }
+
+            return null;
         }
 
         private static CommandResult RunDockerCommand(string p_arguments, string p_workingDirectory)

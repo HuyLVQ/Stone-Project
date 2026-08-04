@@ -7,8 +7,10 @@ using System.Threading.Tasks;
 
 public static class Config
 {
+    public const bool s_isDebugMode = false;
+
     public const int EXPOSURE_TIME = 5_000;
-    public const int TIME_INTERVAL = 1_000;
+    public const int TIME_INTERVAL = 880;
     public const int IMAGE_WIDTH = 1_920;                           // Image width of the camera
     public const int IMAGE_HEIGHT = 1_200;                          // Image height of the camera
 
@@ -26,9 +28,12 @@ public static class Config
 
     public static readonly string s_templateDir = Path.Combine(s_rootPath, "0_UI_Process", "Stone_Application", "PDF_Reference");
     public static readonly string s_templatePath = Path.Combine(s_templateDir, "template.docx");
-    public static readonly string s_excelTemplatePath = Path.Combine(s_templateDir, "Reference.xlsx");
-    public static readonly string s_outputPath = Path.Combine(s_templateDir, "Result_");
 
+    public static readonly string s_excelTemplatePath = s_isDebugMode
+        ? Path.Combine(s_templateDir, "Reference.xlsx")
+        : Path.Combine(s_templateDir, "Reference2.xlsx");
+
+    public static readonly string s_outputPath = Path.Combine(s_templateDir, "Result_");
 
     public const string MMF_TAGNAME = "cam_01_map";
     public const int MAP_SIZE = 20_000_000;
@@ -39,6 +44,4 @@ public static class Config
 
     public const string UI_2_AI_EVENT_TAGNAME = "cam_ui_wrote_event";
     public const string AI_2_UI_EVENT_TAGNAME = "cam_ai_wrote_event";
-
-
 }

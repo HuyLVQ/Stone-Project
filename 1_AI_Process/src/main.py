@@ -6,11 +6,6 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR)
 
 from module.YOLO.src.YOLOModel import YOLOImpl
-from module.weightRegression.linearRegression.linearRegression import predictLinear
-from module.weightRegression.polynominalRegression.polynominalRegression import predictPoly
-from module.weightRegression.randomForest.randomForest import predictRandomForest
-from module.weightRegression.XGBoost.XGBoost import predictXGBoost
-
 from utils.IPCHelpers import IPCHelper
 
 
@@ -34,8 +29,11 @@ def main():
         # _, imgResult, counts = AIModel.processAndVisualize(inferenceResult, None, retrievedImgBytes)
         # IPCInst.taskRead(imgResult, counts, None)
         
-        imgResult, counts, measuredWeight = AIModel.processAndVisualizeWithWeight(inferenceResult, None, retrievedImgBytes, predictXGBoost)
-        IPCInst.taskRead(imgResult, counts, measuredWeight)
+        # imgResult, counts, measuredWeight = AIModel.processAndVisualizeWithWeight(inferenceResult, None, retrievedImgBytes, predictXGBoost)
+        # IPCInst.taskRead(imgResult, counts, measuredWeight)
+        
+        imgResult, counts, measuredWeights = AIModel.processAndVisualizeWithMultipleWeight(inferenceResult, None, retrievedImgBytes)
+        IPCInst.taskReadMultiple(imgResult, counts, measuredWeights)
                 
         
 

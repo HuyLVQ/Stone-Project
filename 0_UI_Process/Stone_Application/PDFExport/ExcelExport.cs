@@ -40,7 +40,12 @@ namespace Stone_Application.PDFExport
                         SetNumericCell(row, "C", rowIndex, CalculatePercentage(measurement.count1x2, totalCount));
                         SetNumericCell(row, "D", rowIndex, CalculatePercentage(measurement.count2x4, totalCount));
                         SetNumericCell(row, "E", rowIndex, CalculatePercentage(measurement.count4x6, totalCount));
-                        SetNumericCell(row, "F", rowIndex, measurement.measuredWeight);
+                        SetNumericCell(row, "F", rowIndex, measurement.measuredWeight1);
+                        if (Config.s_isDebugMode == true) {
+                            SetNumericCell(row, "G", rowIndex, measurement.measuredWeight2);
+                            SetNumericCell(row, "H", rowIndex, measurement.measuredWeight3);
+                            SetNumericCell(row, "I", rowIndex, measurement.measuredWeight4);
+                        }
                         rowIndex++;
                     }
 
