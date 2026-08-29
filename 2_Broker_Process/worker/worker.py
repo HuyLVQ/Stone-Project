@@ -1,52 +1,34 @@
 import zmq
-import struct
 import uuid
+import sys
+from pathlib import Path
 
-from workerMessageStruct import WorkerCommand, \
-                                WorkerCommandType, \
-                                WorkerMessage, \
-                                WorkerMessageType
+sys.path.append(str(Path(__file__).resolve().parent / '..' / 'proto'))
+import brokerDealer_pb2
 
 class Worker:
     def dealerRecv(self):
-        commandType, imageLocation = self.m_rxSocket.recv_multipart()
+        frames = self.m_rxSocket.recv_multipart()
+        if len(frames) != 1:
+            raise ValueError(f"Invalid worker command frame count: {len(frames)}")
+
+        command = brokerDealer_pb2.WorkerCommand()
+        command.ParseFromString(frames[0])
         
-        commandType = struct.unpack("!I", commandType)[0]
-        imageLocation = struct.unpack("!I", imageLocation)[0]
-        
-        if (commandType == WorkerCommandType.PROCESS.value):
+        if command.command_type == brokerDealer_pb2.PROCESS:
             # Implement normal processing
             print("Implement normal processing")
-        elif (commandType == WorkerCommandType.PROCESS_AND_SAVE.value):
+        elif command.command_type == brokerDealer_pb2.PROCESS_AND_SAVE:
             # Implement processing and save
             print("Implement processing and save")
         else:
-            raise ValueError(f"Invalid command type:{commandType}")
+            raise ValueError(f"Invalid command type:{command.command_type}")
         
 
     
     def dealerSend(self, 
-                   p_message: WorkerMessage):
-        
-        message = [
-            struct.pack("!I", p_message.m_workerId),
-            struct.pack("!I", p_message.m_workerMessageType.value),
-        ]
-        
-        if (p_message.m_imageResultLocation is not None):
-            message.append(struct.pack("!I", p_message.m_imageResultLocation))
-            
-        if (p_message.m_rockPercentages is not None):
-            for rockPercentage in p_message.m_rockPercentages:
-                message.append(struct.pack("<q", rockPercentage))
-        
-        if (p_message.m_weight is not None):
-            message.append(struct.pack("<q", p_message.m_weight))
-        
-        if (p_message.m_imageSaveLocation is not None):
-            message.append(struct.pack("!I", p_message.m_imageSaveLocation))
-            
-        self.m_rxSocket.send_multipart(message)
+                   p_message: brokerDealer_pb2.WorkerMessage):
+        self.m_rxSocket.send(p_message.SerializeToString())
 
         
     
@@ -62,13 +44,9 @@ class Worker:
             self.m_rxSocket.connect(self.m_rxSocketIp)
 
             self.dealerSend(
-                WorkerMessage(
-                    self.m_workerId,
-                    WorkerMessageType.READY,
-                    None,
-                    None,
-                    None,
-                    None
+                brokerDealer_pb2.WorkerMessage(
+                    worker_id=self.m_workerId,
+                    message_type=brokerDealer_pb2.READY,
                 )
             )
             

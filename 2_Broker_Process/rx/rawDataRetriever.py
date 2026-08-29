@@ -1,24 +1,19 @@
 import zmq
-import struct
-import os
+import sys
+from pathlib import Path
 
-from rxMessageStruct import RxPullMessageType, \
-                            RxFrame, \
-                            RxPullMessage
+sys.path.append(str(Path(__file__).resolve().parent / '..' / 'proto'))
+import brokerRx_pb2
 
 class RxPathPull:    
     def rxPullRecvMsg(self):
         frames = self.m_rxSocket.recv_multipart()
-        
-        if (len(frames) == 3):
-            messageType, messageLog, messagePayload = frames
-        else:
-            raise ValueError(f"Invalid frame count:{len(frames)}")
-        
-        # Process message type
-        # Process message log
-        
-        return struct.unpack("<q", messagePayload)
+        if len(frames) != 1:
+            raise ValueError(f"Invalid RX message frame count: {len(frames)}")
+
+        message = brokerRx_pb2.RxPullMessage()
+        message.ParseFromString(frames[0])
+        return message
     
     def rxConnecting(self):
         try:

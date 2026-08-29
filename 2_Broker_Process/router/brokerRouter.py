@@ -1,17 +1,13 @@
 import zmq
-import struct
-import asyncio
 from collections import deque
 
 import sys
 from pathlib import Path
 
 sys.path.append(str(
-    Path(__file__).resolve().parent / '..' / 'worker' / 'workerMessageStruct'
+    Path(__file__).resolve().parent / '..' / 'proto'
 ))
-from worker.workerMessageStruct import WorkerCommandType, \
-                                       WorkerCommand, \
-                                       WorkerMessageType
+import brokerDealer_pb2
 
 class BrokerRouter:
     def markWorkerIdle(self,
@@ -20,29 +16,33 @@ class BrokerRouter:
             self.m_idleWorker.append(p_workerId)
             self.m_idleSet.add(p_workerId)
     
-    async def workerRouterSend(self, 
+    def workerRouterSend(self,
                                p_workerId: str,
                                p_imageLocation: int,
-                               p_commandType: WorkerCommandType = WorkerCommandType.PROCESS):
-        
+                               p_commandType: int = brokerDealer_pb2.PROCESS):
+        command = brokerDealer_pb2.WorkerCommand(
+            command_type=p_commandType,
+            image_location=p_imageLocation,
+        )
         message = [
             p_workerId.encode(),
-            struct.pack("!I", p_commandType.value)[0],
-            struct.pack("!I", p_imageLocation)[0]
+            command.SerializeToString(),
         ]
         
-        await self.m_routerSocket.send_multipart(message)
+        self.m_routerSocket.send_multipart(message)
     
-    async def workerRouterRecv(self):
+    def workerRouterRecv(self):
         self.m_poller.poll()
         
-        message = await self.m_routerSocket.recv_multipart()
+        message = self.m_routerSocket.recv_multipart()
         
-        if (struct.unpack("!I", message[1])[0] == WorkerMessageType.READY.value):
-            self.m_idleWorker.append(message[0].decode("utf-8"))
-            self.m_idleSet.add(message[0].decode("utf-8"))
+        worker_message = brokerDealer_pb2.WorkerMessage()
+        worker_message.ParseFromString(message[-1])
+
+        if worker_message.message_type == brokerDealer_pb2.READY:
+            self.markWorkerIdle(message[0].decode("utf-8"))
         
-        return message
+        return worker_message
     
     def taskDistribute(self):
         while self.m_imageQueue and self.m_idleWorker:
@@ -55,7 +55,7 @@ class BrokerRouter:
                 self.m_currentCount = 0
                 self.workerRouterSend(
                     p_workerId=workerId,
-                    p_commandType=WorkerCommandType.PROCESS_AND_SAVE,
+                    p_commandType=brokerDealer_pb2.PROCESS_AND_SAVE,
                     p_imageLocation=imageLocation
                 )
             else:

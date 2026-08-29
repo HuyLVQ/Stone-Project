@@ -1,11 +1,13 @@
 import zmq
-import struct
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent / '..' / 'proto'))
+import brokerTx_pb2
 
 class TxPathPush:
-    def txPushSendMsg(self,
-                      p_message):
-        
-        self.m_txSocket.send_multipart(p_message)
+    def txPushSendMsg(self, p_message: brokerTx_pb2.TxPushMessage):
+        self.m_txSocket.send(p_message.SerializeToString())
     
     def txConnecting(self):
         try:
