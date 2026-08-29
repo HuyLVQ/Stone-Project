@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package stone.broker;
+
+enum RxPullMessageType {
+  RX_PULL_MESSAGE_TYPE_UNSPECIFIED = 0;
+  STARTUP = 1;
+  RAWIMAGE = 2;
+}
+
+message RxFrame {
+  uint64 image_location = 1;
+}
+
+message RxPullMessage {
+  RxPullMessageType message_type = 1;
+  optional string message_log = 2;
+  optional RxFrame data_payload = 3;
+}

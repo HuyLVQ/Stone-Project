@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package stone.broker;
+
+// Commands sent by the broker router to a worker.
+enum WorkerCommandType {
+  WORKER_COMMAND_TYPE_UNSPECIFIED = 0;
+  PROCESS = 1;
+  PROCESS_AND_SAVE = 2;
+}
+
+message WorkerCommand {
+  WorkerCommandType command_type = 1;
+  uint64 image_location = 2;
+}
+
+// Messages sent by a worker back to the broker router.
+enum WorkerMessageType {
+  WORKER_MESSAGE_TYPE_UNSPECIFIED = 0;
+  READY = 1;
+  REQUEST = 2;
+  RESULT = 3;
+  RESULT_AND_SAVE = 4;
+}
+
+message WorkerMessage {
+  string worker_id = 1;
+  WorkerMessageType message_type = 2;
+  optional uint64 image_result_location = 3;
+  repeated float rock_percentages = 4;
+  optional float weight = 5;
+  optional uint64 image_save_location = 6;
+}

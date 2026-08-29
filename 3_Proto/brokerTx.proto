@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package stone.broker;
+
+// The transmit struct is not defined yet in 2_Broker_Process. This envelope
+// provides a stable protobuf payload for TxPathPush without assuming the
+// eventual processed-data fields.
+message TxPushMessage {
+  string message_type = 1;
+  optional string message_log = 2;
+  bytes payload = 3;
+}
