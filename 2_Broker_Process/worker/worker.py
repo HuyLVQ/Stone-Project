@@ -57,7 +57,9 @@ class Worker:
     
     
     def run(self):
-        print("Run")
+        while True:
+            if self.m_rxDataPollIn.poll(100):
+                self.dealerRecv()
     
     def __init__(self,
                  p_workerId: int,

@@ -2,11 +2,15 @@ syntax = "proto3";
 
 package stone.broker;
 
+import "brokerDealer.proto";
+
 // The transmit struct is not defined yet in 2_Broker_Process. This envelope
 // provides a stable protobuf payload for TxPathPush without assuming the
 // eventual processed-data fields.
 message TxPushMessage {
-  string message_type = 1;
-  optional string message_log = 2;
-  bytes payload = 3;
+  WorkerMessageType message_type = 1;
+  optional uint64 image_result_location = 2;
+  repeated float rock_percentages = 3;
+  optional float weight = 4;
+  optional uint64 image_save_location = 5;
 }

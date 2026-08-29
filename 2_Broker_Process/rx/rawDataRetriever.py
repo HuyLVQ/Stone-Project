@@ -14,6 +14,12 @@ class RxPathPull:
         message = brokerRx_pb2.RxPullMessage()
         message.ParseFromString(frames[0])
         return message
+
+    @staticmethod
+    def imageLocation(p_message: brokerRx_pb2.RxPullMessage) -> int:
+        if not p_message.HasField("data_payload"):
+            raise ValueError("RX message does not contain an image location")
+        return p_message.data_payload.image_location
     
     def rxConnecting(self):
         try:

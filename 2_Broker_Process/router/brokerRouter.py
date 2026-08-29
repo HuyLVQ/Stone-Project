@@ -15,6 +15,9 @@ class BrokerRouter:
         if p_workerId not in self.m_idleSet:
             self.m_idleWorker.append(p_workerId)
             self.m_idleSet.add(p_workerId)
+
+    def enqueueImage(self, p_imageLocation: int):
+        self.m_imageQueue.append(p_imageLocation)
     
     def workerRouterSend(self,
                                p_workerId: str,
@@ -31,18 +34,26 @@ class BrokerRouter:
         
         self.m_routerSocket.send_multipart(message)
     
-    def workerRouterRecv(self):
-        self.m_poller.poll()
+    def workerRouterRecv(self, p_timeout: int = 0):
+        if not self.m_poller.poll(p_timeout):
+            return None
         
         message = self.m_routerSocket.recv_multipart()
         
         worker_message = brokerDealer_pb2.WorkerMessage()
         worker_message.ParseFromString(message[-1])
 
-        if worker_message.message_type == brokerDealer_pb2.READY:
+        if worker_message.message_type in (
+                brokerDealer_pb2.READY,
+                brokerDealer_pb2.REQUEST,
+                brokerDealer_pb2.RESULT,
+                brokerDealer_pb2.RESULT_AND_SAVE):
             self.markWorkerIdle(message[0].decode("utf-8"))
         
         return worker_message
+
+    def distributeTasks(self):
+        self.taskDistribute()
     
     def taskDistribute(self):
         while self.m_imageQueue and self.m_idleWorker:
