@@ -1,10 +1,13 @@
 import sys
 
-MMF_TAGNAME = sys.argv[1]
-UI_2_AI_EVENT_TAGNAME = sys.argv[2] 
-AI_2_UI_EVENT_TAGNAME = sys.argv[3] 
-IMAGE_WIDTH, IMAGE_HEIGHT = int(sys.argv[4]), int(sys.argv[5])
-IS_DEBUG_MODE = len(sys.argv) > 6 and sys.argv[6].lower() == "true"
+# Worker processes receive MMF names, map size, dimensions, and broker
+# endpoint. Keep the legacy values only for compatibility with old tools.
+MMF_TAGNAME = sys.argv[1] if len(sys.argv) > 1 else ""
+UI_2_AI_EVENT_TAGNAME = ""
+AI_2_UI_EVENT_TAGNAME = ""
+IMAGE_WIDTH = int(sys.argv[4]) if len(sys.argv) > 5 else 1_920
+IMAGE_HEIGHT = int(sys.argv[5]) if len(sys.argv) > 5 else 1_200
+IS_DEBUG_MODE = False
 
 WRITE_OFFSET = 0                                ## Offset value from the beginning address of shared memory region
 READ_OFFSET = 10_000_000                        ## Offset value from the beginning address of shared memory region

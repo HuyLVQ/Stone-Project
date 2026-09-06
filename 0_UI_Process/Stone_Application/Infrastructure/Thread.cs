@@ -1,24 +1,18 @@
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Basler.Pylon;
-using EasyModbus;
-using Stone_Application;
 using Stone_Application.Event;
 using Stone_Application.IPC;
 using Stone_Application.Observer;
+using Stone.Broker;
 
 namespace Stone_Application.Infrastructure
 {
     public static class MultiThread
     {
         private static CancellationTokenSource s_cancellationSource;
-        private static Task s_thread1Task;
-        private static Task s_thread2Task;
+        private static Task s_captureTask;
+        private static Task s_pipelineTask;
         private static readonly object s_startStopLock = new object();
 
         public static void thread1Work()
@@ -27,17 +21,12 @@ namespace Stone_Application.Infrastructure
             {
                 if (s_cancellationSource == null)
                     s_cancellationSource = new CancellationTokenSource();
-
-                if (s_thread1Task != null && !s_thread1Task.IsCompleted)
-                    return; // already running
+                if (s_captureTask != null && !s_captureTask.IsCompleted)
+                    return;
 
                 CancellationToken token = s_cancellationSource.Token;
-
-                s_thread1Task = Task.Run(() =>
+                s_captureTask = Task.Run(() =>
                 {
-                    int[] temporaryStorage = new int[2];
-                    int encoderFeedback = 0;
-
                     while (!token.IsCancellationRequested)
                     {
                         try
@@ -46,39 +35,20 @@ namespace Stone_Application.Infrastructure
                             {
                                 if (Common.s_currentState != Common.currentState.STREAMING)
                                 {
-                                    if (Config.s_isDebugMode == true) {
-                                        Console.WriteLine("[INFO] [THREAD #1] Not in streamin mode, go to sleep...");
-                                    }
                                     Thread.Sleep(100);
                                     continue;
                                 }
                             }
-
                             if (Common.s_stopWatchMain.ElapsedMilliseconds >= Config.TIME_INTERVAL)
                             {
                                 Common.s_stopWatchMain.Restart();
-
-                                if (Config.s_isDebugMode == true) {
-                                    Console.WriteLine("[INFO] [THREAD #1] New Thread 1 cycle...");
-                                    Console.WriteLine("[INFO] [THREAD #1] Camera capture...");
-                                }
-
                                 Common.camera.cameraCapture(token);
                             }
-                            // small delay to avoid busy spin if interval is very small
                             Thread.Sleep(1);
-                            //Console.WriteLine("[INFO] [THREAD #1] Exiting thread.");
                         }
-                        catch (OperationCanceledException)
-                        {
-                            break;
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"[ERROR] [THREAD #1] Exception: {ex.Message}");
-                        }
+                        catch (OperationCanceledException) { break; }
+                        catch (Exception ex) { Console.WriteLine("[ERROR] [THREAD #1] " + ex.Message); }
                     }
-
                 }, token);
             }
         }
@@ -89,111 +59,50 @@ namespace Stone_Application.Infrastructure
             {
                 if (s_cancellationSource == null)
                     s_cancellationSource = new CancellationTokenSource();
+                if (s_pipelineTask != null && !s_pipelineTask.IsCompleted)
+                    return;
 
-                if (s_thread2Task != null && !s_thread2Task.IsCompleted)
-                    return; // already running
-
-                IPCServices ipcServices = IPCServices.getInstance();
-                AIProcessEvent aiProcessEvent = AIProcessEvent.getInstance(ipcServices);
-
-                IEventObserver<IInformation> dbObserver = new DBObserver<IInformation>(Common.s_repositoryInstance);
-                IEventObserver<Event.IImage> uiImageObserver = new UIImageObserver<Event.IImage>();
-                IEventObserver<IInformation> uiInformationObserver = new UIInformationObserver<IInformation>();
-
-                aiProcessEvent.attachInformationObserver(dbObserver);
-                aiProcessEvent.attachImageObserver(uiImageObserver);
-                aiProcessEvent.attachInformationObserver(uiInformationObserver);
+                IPCServices ipc = IPCServices.getInstance();
+                var aiEvent = Event.AIProcessEvent.getInstance(ipc);
+                var dbObserver = new DBObserver<IInformation>(Common.s_repositoryInstance);
+                var imageObserver = new UIImageObserver<IImage>();
+                var informationObserver = new UIInformationObserver<IInformation>();
+                aiEvent.attachInformationObserver(dbObserver);
+                aiEvent.attachImageObserver(imageObserver);
+                aiEvent.attachInformationObserver(informationObserver);
 
                 CancellationToken token = s_cancellationSource.Token;
-
-                s_thread2Task = Task.Run(() =>
+                s_pipelineTask = Task.Run(() =>
                 {
-                    try
+                    while (!token.IsCancellationRequested)
                     {
-                        while (!token.IsCancellationRequested)
-                        {   
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] New Thread 2 cycle...");
-                            }
-
-                            Event.IImage temporaryImage;
-                            try
+                        try
+                        {
+                            while (ipc.TryReceiveResult(out var result))
                             {
-                                // BlockingCollection.Take supports cancellation token
-                                temporaryImage = Common.s_imageQueue.Take(token);
-                            }
-                            catch (OperationCanceledException)
-                            {
-                                break;
+                                var info = new IInformation();
+                                if (result.RockPercentages.Count > 0) info.countMiSang = (long)result.RockPercentages[0];
+                                if (result.RockPercentages.Count > 1) info.count1x2 = (long)result.RockPercentages[1];
+                                if (result.RockPercentages.Count > 2) info.count2x4 = (long)result.RockPercentages[2];
+                                if (result.RockPercentages.Count > 3) info.count4x6 = (long)result.RockPercentages[3];
+                                if (result.Weight.Count > 0) info.measuredWeight1 = result.Weight[0];
+                                if (result.Weight.Count > 1) info.measuredWeight2 = result.Weight[1];
+                                if (result.Weight.Count > 2) info.measuredWeight3 = result.Weight[2];
+                                if (result.Weight.Count > 3) info.measuredWeight4 = result.Weight[3];
+
+                                if (result.MessageType == WorkerMessageType.ResultAndSave && result.HasImageSaveLocation)
+                                    aiEvent.notifyImage(ipc.ReadOutputImage(result.ImageSaveLocation));
+                                aiEvent.notifyInformation(info);
+                                ipc.ReleaseImageSlot(result.ImageLocation);
                             }
 
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] Image taken from queue...");
-                            }
-
-                            try
-                            {
-                                ipcServices.writeTask(temporaryImage);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine("[ERROR] [THREAD #2] writeTask failed: " + ex.Message);
-                                continue;
-                            }
-
-                            Common.ui2aiEvent.Set();
-
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] UI to AI event set...");
-                            }
-
-                            // Wait for AI to respond, but allow periodic cancellation checks.
-                            while (!token.IsCancellationRequested)
-                            {
-                                // WaitOne with timeout to be able to check cancellation token regularly.
-                                if (Common.ai2uiEvent.WaitOne(200))
-                                    break;
-                            }
-
-                            if (token.IsCancellationRequested)
-                                break;
-
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] AI to UI event received...");
-                            }
-
-                            IInformation temporaryInformation;
-                            try
-                            {
-                                (temporaryInformation, temporaryImage) = ipcServices.readTask();
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine("[ERROR] [THREAD #2] readTask failed: " + ex.Message);
-                                continue;
-                            }
-
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] AI results read from shared memory...");
-                            }
-
-                            aiProcessEvent.notifyImage(temporaryImage);
-                            aiProcessEvent.notifyInformation(temporaryInformation);
+                            IImage image;
+                            if (Common.s_imageQueue.TryTake(out image, 10, token))
+                                ipc.TryWriteAndSend(image, out _); // false means the bounded pipeline drops this frame.
                         }
+                        catch (OperationCanceledException) { break; }
+                        catch (Exception ex) { Console.WriteLine("[ERROR] [THREAD #2] " + ex.Message); }
                     }
-                    catch (OperationCanceledException)
-                    {
-                        // swallow, shutting down
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine("[ERROR] [THREAD #2] Unexpected exception: " + ex.Message);
-                    }
-
-                    if (Config.s_isDebugMode == true) {
-                        Console.WriteLine("[INFO] [THREAD #2] Exiting thread.");
-                    }
-                    
                 }, token);
             }
         }
@@ -202,42 +111,21 @@ namespace Stone_Application.Infrastructure
         {
             lock (s_startStopLock)
             {
-                if (s_cancellationSource == null)
-                    return;
-
-                Console.WriteLine("[INFO] [THREAD] Stopping threads...");
-
+                if (s_cancellationSource == null) return;
+                s_cancellationSource.Cancel();
                 try
                 {
-                    s_cancellationSource.Cancel();
-
-                    Task[] tasksToWait = Array.FindAll(new[] { s_thread1Task, s_thread2Task }, p_t => p_t != null);
-                    if (tasksToWait.Length > 0)
-                    {
-                        try
-                        {
-                            Task.WaitAll(tasksToWait, TimeSpan.FromSeconds(5));
-                        }
-                        catch (AggregateException ae)
-                        {
-                            foreach (var e in ae.InnerExceptions)
-                                Console.WriteLine("[WARN] [THREAD] Task exception while stopping: " + e.Message);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine("[WARN] [THREAD] WaitAll exception: " + ex.Message);
-                        }
-                    }
+                    Task[] tasks = new[] { s_captureTask, s_pipelineTask };
+                    Task.WaitAll(Array.FindAll(tasks, task => task != null), TimeSpan.FromSeconds(5));
                 }
+                catch (Exception ex) { Console.WriteLine("[WARN] [THREAD] Stop failed: " + ex.Message); }
                 finally
                 {
                     s_cancellationSource.Dispose();
                     s_cancellationSource = null;
-                    s_thread1Task = null;
-                    s_thread2Task = null;
+                    s_captureTask = null;
+                    s_pipelineTask = null;
                 }
-
-                Console.WriteLine("[INFO] [THREAD] Threads stopped.");
             }
         }
     }

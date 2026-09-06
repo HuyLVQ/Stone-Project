@@ -1,125 +1,117 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.IO.MemoryMappedFiles;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
+using Google.Protobuf;
+using NetMQ;
+using NetMQ.Sockets;
+using Stone.Broker;
 using Stone_Application.Event;
 
 namespace Stone_Application.IPC
 {
-    public class IPCServices
+    public sealed class IPCServices : IDisposable
     {
         private static IPCServices s_instance;
+        private readonly MemoryMappedFile m_inputMap;
+        private readonly MemoryMappedFile m_outputMap;
+        private readonly PushSocket m_rxSocket;
+        private readonly PullSocket m_txSocket;
+        private readonly object m_sendLock = new object();
 
         private IPCServices()
         {
-            Common.ui2aiEvent = new EventWaitHandle(false, EventResetMode.AutoReset, Config.UI_2_AI_EVENT_TAGNAME);
-            Common.ai2uiEvent = new EventWaitHandle(false, EventResetMode.AutoReset, Config.AI_2_UI_EVENT_TAGNAME);
+            m_inputMap = MemoryMappedFile.CreateOrOpen(Config.INPUT_MMF_TAGNAME, Config.MAP_SIZE);
+            m_outputMap = MemoryMappedFile.CreateOrOpen(Config.OUTPUT_MMF_TAGNAME, Config.MAP_SIZE);
 
-            Common.mmf = MemoryMappedFile.CreateOrOpen(Config.MMF_TAGNAME, Config.MAP_SIZE);
-        }
-
-        static public void IPCCleanUp()
-        {
-            if (Common.ui2aiEvent != null)
-            {
-                Common.ui2aiEvent.Dispose();
-                Common.ui2aiEvent = null;
-            }
-
-            if (Common.ai2uiEvent != null)
-            {
-                Common.ai2uiEvent.Dispose();
-                Common.ai2uiEvent = null;
-            }
-
-            if (Common.mmf != null)
-            {
-                Common.mmf.Dispose();
-                Common.mmf = null;
-            }
-
-            if (Common.pythonProcess != null && !Common.pythonProcess.HasExited)
-            {
-                try
-                {
-                    Common.pythonProcess.Kill();
-                    Common.pythonProcess.WaitForExit();
-                    Console.WriteLine("[INFO] [IPC] Python process terminated.");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[ERROR] [IPC] Failed to terminate Python process: {ex.Message}");
-                }
-                Common.pythonProcess = null;
-            }
-
-            Console.WriteLine("[INFO] [IPC] IPC resources cleaned up.");
+            m_rxSocket = new PushSocket();
+            m_rxSocket.Connect(Config.BROKER_RX_ENDPOINT);
+            m_txSocket = new PullSocket();
+            m_txSocket.Connect(Config.BROKER_TX_ENDPOINT);
         }
 
         public static IPCServices getInstance()
         {
             if (s_instance == null)
-            {
                 s_instance = new IPCServices();
-            }
             return s_instance;
         }
 
-        public void writeTask(IImage p_image)
+        public bool TryWriteAndSend(IImage p_image, out ulong p_imageLocation)
         {
-            using (MemoryMappedViewStream stream = Common.mmf.CreateViewStream(Config.WRITE_OFFSET, Config.WRITE_READ_SIZE))
+            p_imageLocation = 0;
+            if (p_image == null || p_image.recvImage == null || p_image.recvImage.Length != Config.IMAGE_BYTE_SIZE)
+                return false;
+
+            int slot;
+            if (!Common.s_availableImageSlots.TryDequeue(out slot))
+                return false;
+            p_imageLocation = (ulong)slot;
+
+            using (var accessor = m_inputMap.CreateViewAccessor((long)p_imageLocation, Config.IMAGE_BYTE_SIZE, MemoryMappedFileAccess.Write))
+                accessor.WriteArray(0, p_image.recvImage, 0, p_image.recvImage.Length);
+
+            var message = new RxPullMessage
             {
-                using (BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, false))
-                {
-                    writer.Write(p_image.recvImage);
-                }
+                MessageType = RxPullMessageType.Rawimage,
+                DataPayload = new RxFrame { ImageLocation = p_imageLocation }
+            };
+            try
+            {
+                lock (m_sendLock)
+                    m_rxSocket.SendFrame(message.ToByteArray());
+                return true;
+            }
+            catch
+            {
+                Common.s_availableImageSlots.Enqueue(slot);
+                throw;
             }
         }
 
-        public (IInformation, IImage) readTask()
-        { 
-            using (MemoryMappedViewStream stream = Common.mmf.CreateViewStream(Config.READ_OFFSET, Config.WRITE_READ_SIZE))
+        public void ReleaseImageSlot(ulong p_imageLocation)
+        {
+            if (p_imageLocation % Config.IMAGE_SLOT_STRIDE == 0 && p_imageLocation < (ulong)Config.MAP_SIZE)
+                Common.s_availableImageSlots.Enqueue((int)p_imageLocation);
+        }
+
+        public bool TryReceiveResult(out TxPushMessage p_message)
+        {
+            byte[] bytes;
+            if (!m_txSocket.TryReceiveFrameBytes(TimeSpan.Zero, out bytes))
             {
-
-                using (BinaryReader reader = new BinaryReader(stream, Encoding.UTF8, false))
-                {
-                    Int64 delta_perct_misang = reader.ReadInt64();
-                    Int64 delta_perct_1_2 = reader.ReadInt64();
-                    Int64 delta_perct_2_4 = reader.ReadInt64();
-                    Int64 delta_perct_4_6 = reader.ReadInt64();
-                    float measured_weight1 = reader.ReadSingle();
-                    float measured_weight2 = Config.s_isDebugMode ? reader.ReadSingle() : 0.0f;
-                    float measured_weight3 = Config.s_isDebugMode ? reader.ReadSingle() : 0.0f;
-                    float measured_weight4 = Config.s_isDebugMode ? reader.ReadSingle() : 0.0f;
-
-                    stream.Seek(Config.OFFSET_IMAGE, SeekOrigin.Begin);
-                    byte[] image_data = reader.ReadBytes(Config.IMAGE_HEIGHT * Config.IMAGE_WIDTH * 3);
-
-                    IInformation information = new IInformation
-                    {
-                        countMiSang = delta_perct_misang,
-                        count1x2 = delta_perct_1_2,
-                        count2x4 = delta_perct_2_4,
-                        count4x6 = delta_perct_4_6,
-                        measuredWeight1 = measured_weight1,
-                        measuredWeight2 = measured_weight2,
-                        measuredWeight3 = measured_weight3,
-                        measuredWeight4 = measured_weight4
-                    };
-
-                    IImage image = new IImage
-                    {
-                        recvImage = image_data
-                    };
-
-                    return (information, image);
-                }
+                p_message = null;
+                return false;
             }
+            p_message = TxPushMessage.Parser.ParseFrom(bytes);
+            return true;
+        }
+
+        public IImage ReadOutputImage(ulong p_imageLocation)
+        {
+            if (p_imageLocation + Config.IMAGE_BYTE_SIZE > (ulong)Config.MAP_SIZE)
+                throw new ArgumentOutOfRangeException(nameof(p_imageLocation));
+            byte[] image = new byte[Config.IMAGE_BYTE_SIZE];
+            using (var accessor = m_outputMap.CreateViewAccessor((long)p_imageLocation, Config.IMAGE_BYTE_SIZE, MemoryMappedFileAccess.Read))
+                accessor.ReadArray(0, image, 0, image.Length);
+            return new IImage { recvImage = image };
+        }
+
+        public static void IPCCleanUp()
+        {
+            AIHelper.aiClosing();
+            if (s_instance == null)
+                return;
+            s_instance.Dispose();
+            s_instance = null;
+            NetMQConfig.Cleanup(false);
+        }
+
+        public void Dispose()
+        {
+            m_rxSocket?.Dispose();
+            m_txSocket?.Dispose();
+            m_inputMap?.Dispose();
+            m_outputMap?.Dispose();
         }
     }
 }

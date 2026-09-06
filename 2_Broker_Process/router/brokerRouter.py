@@ -1,98 +1,59 @@
-import zmq
 from collections import deque
-
 import sys
 from pathlib import Path
 
-sys.path.append(str(
-    Path(__file__).resolve().parent / '..' / 'proto'
-))
+import zmq
+
+sys.path.append(str(Path(__file__).resolve().parent / ".." / "proto"))
 import brokerDealer_pb2
 
+
 class BrokerRouter:
-    def markWorkerIdle(self,
-                       p_workerId: int):
-        if p_workerId not in self.m_idleSet:
-            self.m_idleWorker.append(p_workerId)
-            self.m_idleSet.add(p_workerId)
+    def __init__(self, endpoint, image_interval=10, queue_limit=2):
+        self.endpoint = endpoint
+        self.image_interval = image_interval
+        self.image_queue = deque(maxlen=queue_limit)
+        self.idle_workers = deque()
+        self.idle_set = set()
+        self.frame_count = 0
 
-    def enqueueImage(self, p_imageLocation: int):
-        self.m_imageQueue.append(p_imageLocation)
-    
-    def workerRouterSend(self,
-                               p_workerId: str,
-                               p_imageLocation: int,
-                               p_commandType: int = brokerDealer_pb2.PROCESS):
-        command = brokerDealer_pb2.WorkerCommand(
-            command_type=p_commandType,
-            image_location=p_imageLocation,
+    def connect(self):
+        self.context = zmq.Context.instance()
+        self.socket = self.context.socket(zmq.ROUTER)
+        self.socket.bind(self.endpoint)
+
+    def enqueue_image(self, image_location):
+        # deque(maxlen=...) drops the oldest queued frame, preserving low latency.
+        self.frame_count += 1
+        command_type = (
+            brokerDealer_pb2.PROCESS_AND_SAVE
+            if self.frame_count % self.image_interval == 0
+            else brokerDealer_pb2.PROCESS
         )
-        message = [
-            p_workerId.encode(),
-            command.SerializeToString(),
-        ]
-        
-        self.m_routerSocket.send_multipart(message)
-    
-    def workerRouterRecv(self, p_timeout: int = 0):
-        if not self.m_poller.poll(p_timeout):
-            return None
-        
-        message = self.m_routerSocket.recv_multipart()
-        
-        worker_message = brokerDealer_pb2.WorkerMessage()
-        worker_message.ParseFromString(message[-1])
+        self.image_queue.append((image_location, command_type))
 
-        if worker_message.message_type in (
-                brokerDealer_pb2.READY,
-                brokerDealer_pb2.REQUEST,
-                brokerDealer_pb2.RESULT,
-                brokerDealer_pb2.RESULT_AND_SAVE):
-            self.markWorkerIdle(message[0].decode("utf-8"))
-        
-        return worker_message
+    def receive(self):
+        frames = self.socket.recv_multipart()
+        if len(frames) != 2:
+            raise ValueError(f"Invalid ROUTER frame count: {len(frames)}")
+        worker_id = frames[0].decode("utf-8")
+        message = brokerDealer_pb2.WorkerMessage()
+        message.ParseFromString(frames[1])
+        self.mark_idle(worker_id)
+        return worker_id, message
 
-    def distributeTasks(self):
-        self.taskDistribute()
-    
-    def taskDistribute(self):
-        while self.m_imageQueue and self.m_idleWorker:
-            workerId = self.m_idleWorker.popleft()
-            self.m_idleSet.remove(workerId)
+    def mark_idle(self, worker_id):
+        if worker_id not in self.idle_set:
+            self.idle_workers.append(worker_id)
+            self.idle_set.add(worker_id)
 
-            imageLocation = self.m_imageQueue.popleft()
-            
-            if self.m_currentCount == 8:
-                self.m_currentCount = 0
-                self.workerRouterSend(
-                    p_workerId=workerId,
-                    p_commandType=brokerDealer_pb2.PROCESS_AND_SAVE,
-                    p_imageLocation=imageLocation
-                )
-            else:
-                self.m_currentCount += 1
-                self.workerRouterSend(
-                    p_workerId=workerId,
-                    p_imageLocation=imageLocation
-                )
-    
-    def brokerRouterConnect(self):
-        self.m_context = zmq.Context()
-        self.m_routerSocket = self.m_context.socket(zmq.ROUTER)
-        
-        self.m_poller = zmq.Poller()
-        self.m_poller.register(self.m_routerSocket, zmq.POLLIN)
-        
-        self.m_routerSocket.bind(self.m_routerSocketIp)
-    
-    
-    def __init__(self,
-                 p_routerSocketIp: str,
-                 ):
-        self.m_routerSocketIp = p_routerSocketIp
-        
-        self.m_imageQueue = deque()
-        self.m_idleWorker = deque()
-        self.m_idleSet = set()          # Prevent the same worker from being queued twice.
-        
-        self.m_currentCount = 0         # Each 8 pictures captured, the command is set to PROCESS_AND_SAVE
+    def distribute(self):
+        while self.image_queue and self.idle_workers:
+            worker_id = self.idle_workers.popleft()
+            self.idle_set.remove(worker_id)
+            image_location, command_type = self.image_queue.popleft()
+            command = brokerDealer_pb2.WorkerCommand(
+                command_type=command_type,
+                image_location=image_location,
+            )
+            self.socket.send_multipart([worker_id.encode("utf-8"), command.SerializeToString()])

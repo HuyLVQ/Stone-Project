@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 import brokerDealer_pb2 as brokerDealer__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0e\x62rokerTx.proto\x12\x0cstone.broker\x1a\x12\x62rokerDealer.proto\"\xf8\x01\n\rTxPushMessage\x12\x35\n\x0cmessage_type\x18\x01 \x01(\x0e\x32\x1f.stone.broker.WorkerMessageType\x12\"\n\x15image_result_location\x18\x02 \x01(\x04H\x00\x88\x01\x01\x12\x18\n\x10rock_percentages\x18\x03 \x03(\x02\x12\x13\n\x06weight\x18\x04 \x01(\x02H\x01\x88\x01\x01\x12 \n\x13image_save_location\x18\x05 \x01(\x04H\x02\x88\x01\x01\x42\x18\n\x16_image_result_locationB\t\n\x07_weightB\x16\n\x14_image_save_locationb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0e\x62rokerTx.proto\x12\x0cstone.broker\x1a\x12\x62rokerDealer.proto\"\x80\x02\n\rTxPushMessage\x12\x35\n\x0cmessage_type\x18\x01 \x01(\x0e\x32\x1f.stone.broker.WorkerMessageType\x12\"\n\x15image_result_location\x18\x02 \x01(\x04H\x00\x88\x01\x01\x12\x18\n\x10rock_percentages\x18\x03 \x03(\x02\x12\x0e\n\x06weight\x18\x04 \x03(\x02\x12 \n\x13image_save_location\x18\x05 \x01(\x04H\x01\x88\x01\x01\x12\x16\n\x0eimage_location\x18\x06 \x01(\x04\x42\x18\n\x16_image_result_locationB\x16\n\x14_image_save_locationb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,5 +33,5 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'brokerTx_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_TXPUSHMESSAGE']._serialized_start=53
-  _globals['_TXPUSHMESSAGE']._serialized_end=301
+  _globals['_TXPUSHMESSAGE']._serialized_end=309
 # @@protoc_insertion_point(module_scope)

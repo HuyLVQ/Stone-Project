@@ -6,7 +6,7 @@ sys.path.append(str(Path(__file__).resolve().parent / '..' / 'proto'))
 import brokerRx_pb2
 
 class RxPathPull:    
-    def rxPullRecvMsg(self):
+    def receive(self):
         frames = self.m_rxSocket.recv_multipart()
         if len(frames) != 1:
             raise ValueError(f"Invalid RX message frame count: {len(frames)}")
@@ -16,12 +16,12 @@ class RxPathPull:
         return message
 
     @staticmethod
-    def imageLocation(p_message: brokerRx_pb2.RxPullMessage) -> int:
+    def image_location(p_message: brokerRx_pb2.RxPullMessage) -> int:
         if not p_message.HasField("data_payload"):
             raise ValueError("RX message does not contain an image location")
         return p_message.data_payload.image_location
     
-    def rxConnecting(self):
+    def connect(self):
         try:
             self.m_rxContext = zmq.Context()
             self.m_rxSocket = self.m_rxContext.socket(zmq.PULL)
@@ -30,6 +30,7 @@ class RxPathPull:
             self.m_rxDataPollIn.register(self.m_rxSocket, zmq.POLLIN)
         
             self.m_rxSocket.connect(self.m_rxSocketIp)
+            self.socket = self.m_rxSocket
 
         except zmq.Again as e:
             print(f"The operation have an exception:{e}")

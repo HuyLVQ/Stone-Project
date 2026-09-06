@@ -236,15 +236,16 @@ class YOLOImpl():
     def processAndVisualizeWithMultipleWeight(self,
                                               p_inferenceResult: any,
                                               p_ratioScale: float,
-                                              p_imgOriginal: np.ndarray) -> tuple[bytes, dict[str, int], float]:
+                                              p_imgOriginal: np.ndarray,
+                                              p_draw: bool = True) -> tuple[bytes, dict[str, int], list[float]]:
         if (p_ratioScale is None):
             p_ratioScale = self.m_RATIO_SCALE
             
         concernedRockType = list(self.m_TYPE_COLORS.keys())
 
         
-        imgDraw = p_imgOriginal.copy()
-        overlay = imgDraw.copy()
+        imgDraw = p_imgOriginal.copy() if p_draw else None
+        overlay = imgDraw.copy() if p_draw else None
         
         areaScale = p_ratioScale ** 2
         
@@ -285,25 +286,27 @@ class YOLOImpl():
                         
                         classificationCounts[rockType] += 1
 
-                        color = self.m_TYPE_COLORS[rockType]
-                        contourInt = np.array(contour, dtype=np.int32)
-                        boxOBB = np.int32(cv2.boxPoints(rect))
+                        if p_draw:
+                            color = self.m_TYPE_COLORS[rockType]
+                            contourInt = np.array(contour, dtype=np.int32)
+                            boxOBB = np.int32(cv2.boxPoints(rect))
 
-                        cv2.fillPoly(overlay, [contourInt], color)
-                        cv2.polylines(imgDraw, [boxOBB], isClosed=True, color=(0, 255, 0), thickness=2)
+                            cv2.fillPoly(overlay, [contourInt], color)
+                            cv2.polylines(imgDraw, [boxOBB], isClosed=True, color=(0, 255, 0), thickness=2)
 
-                        M = cv2.moments(contourInt)
-                        if M["m00"] != 0:
-                            cX = int(M["m10"] / M["m00"])
-                            cY = int(M["m01"] / M["m00"])
-                        else:
-                            cX, cY = int(contour[0][0]), int(contour[0][1])
+                            M = cv2.moments(contourInt)
+                            if M["m00"] != 0:
+                                cX = int(M["m10"] / M["m00"])
+                                cY = int(M["m01"] / M["m00"])
+                            else:
+                                cX, cY = int(contour[0][0]), int(contour[0][1])
 
-                        text = f"ID:{i} - {rockType}"
-                        cv2.putText(imgDraw, text, (cX - 20, cY), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (255, 255, 255), 1)
+                            text = f"ID:{i} - {rockType}"
+                            cv2.putText(imgDraw, text, (cX - 20, cY), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (255, 255, 255), 1)
         
-        alpha = 0.28
-        cv2.addWeighted(overlay, alpha, imgDraw, 1 - alpha, 0, imgDraw)
+        if p_draw:
+            alpha = 0.28
+            cv2.addWeighted(overlay, alpha, imgDraw, 1 - alpha, 0, imgDraw)
 
 
         measuredWeightResults = []
@@ -325,4 +328,4 @@ class YOLOImpl():
                 print(measuredWeight, flush=True)
             measuredWeightResults.append(measuredWeight)
                         
-        return imgDraw.tobytes(), classificationCounts, measuredWeightResults
+        return (imgDraw.tobytes() if p_draw else None), classificationCounts, measuredWeightResults

@@ -38,6 +38,16 @@ public static class Common
 
         public static Process pythonProcess { get; set; }
         public static bool isFirstInference { get; set; } = true;
+        public static int s_nextImageSlot = -1;
+        public static readonly ConcurrentQueue<int> s_availableImageSlots = CreateImageSlots();
+
+        private static ConcurrentQueue<int> CreateImageSlots()
+        {
+            var slots = new ConcurrentQueue<int>();
+            for (int i = 0; i < Config.IMAGE_SLOT_COUNT; i++)
+                slots.Enqueue(i * Config.IMAGE_SLOT_STRIDE);
+            return slots;
+        }
 
 
         public static MemoryMappedFile mmf { get; set; }

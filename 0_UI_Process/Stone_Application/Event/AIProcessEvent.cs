@@ -76,20 +76,8 @@ namespace Stone_Application.Event
 
         public void notify()
         {
-            try
-            {
-                var (information, image) = m_ipcService.readTask();
-
-                if (information != null)
-                    notifyInformation(information);
-
-                if (image != null)
-                    notifyImage(image);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("[ERROR] [AI EVENT] " + ex.Message);
-            }
+            // Results are now received by MultiThread through ZeroMQ and
+            // published directly with notifyInformation/notifyImage.
         }
 
     }

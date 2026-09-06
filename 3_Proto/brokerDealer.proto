@@ -2,7 +2,8 @@ syntax = "proto3";
 
 package stone.broker;
 
-// Commands sent by the broker router to a worker.
+// Commands sent by the broker router to a worker. image_location is a byte
+// offset into the named input MMF passed to the worker at startup.
 enum WorkerCommandType {
   WORKER_COMMAND_TYPE_UNSPECIFIED = 0;
   PROCESS = 1;
@@ -27,7 +28,10 @@ message WorkerMessage {
   string worker_id = 1;
   WorkerMessageType message_type = 2;
   optional uint64 image_result_location = 3;
+  // Order: MiSang, 1x2, 2x4, 4x6, Khac.
   repeated float rock_percentages = 4;
-  optional float weight = 5;
+  repeated float weight = 5;
   optional uint64 image_save_location = 6;
+  // Internal slot ownership correlation; this is not a processed-image path.
+  uint64 image_location = 7;
 }

@@ -5,8 +5,8 @@ package stone.broker;
 import "brokerDealer.proto";
 
 // The ROUTER socket carries either a command to a worker or a message from
-// a worker. The worker identity is kept separately because it is a ZeroMQ
-// routing frame, but is included here for transports that carry one payload.
+// a worker. The worker identity is kept separately in the ZeroMQ routing
+// frame, but is included here for transports that carry one payload.
 message BrokerRouterMessage {
   string worker_id = 1;
 

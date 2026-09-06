@@ -187,9 +187,25 @@
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="WindowsBase" />
+    <Reference Include="AsyncIO">
+      <HintPath>packages\AsyncIO.0.1.69\lib\net40\AsyncIO.dll</HintPath>
+    </Reference>
+    <Reference Include="Google.Protobuf">
+      <HintPath>packages\Google.Protobuf.3.25.5\lib\net45\Google.Protobuf.dll</HintPath>
+    </Reference>
+    <Reference Include="NaCl">
+      <HintPath>packages\NaCl.Net.0.1.13\lib\net472\NaCl.dll</HintPath>
+    </Reference>
+    <Reference Include="NetMQ">
+      <HintPath>packages\NetMQ.4.0.1.13\lib\net47\NetMQ.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AIHelpers\AIHelper.cs" />
+    <Compile Include="Proto\BrokerDealer.cs" />
+    <Compile Include="Proto\BrokerRouter.cs" />
+    <Compile Include="Proto\BrokerRx.cs" />
+    <Compile Include="Proto\BrokerTx.cs" />
     <Compile Include="CameraClass\BaslerCamera.cs" />
     <Compile Include="Common\Common.cs" />
     <Compile Include="Common\Config.cs" />

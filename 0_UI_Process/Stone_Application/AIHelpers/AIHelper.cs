@@ -1,136 +1,57 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing.Imaging;
-using System.Drawing;
-using System.IO.MemoryMappedFiles;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using Stone_Application.Forms;
-using Stone_Application;
+using System.Threading;
 
 public sealed class AIHelper
 {
     public static void initializeAI()
     {
-
-
-
-        if (Common.pythonProcess != null && !Common.pythonProcess.HasExited)
-        {
-            try { Common.pythonProcess.Kill(); Common.pythonProcess.WaitForExit(); }
-            catch (Exception e) { 
-                Console.WriteLine("[WARN] Previous AI process terminated failed\n" + e.Message);
-            } 
-        }
-
-        ProcessStartInfo psi = new ProcessStartInfo
+        aiClosing();
+        var psi = new ProcessStartInfo
         {
             FileName = Config.s_pythonEnvPath,
-            Arguments = $"\"{Config.s_pythonScriptPath}\" " +
-                        $"\"{Config.MMF_TAGNAME}\" " +
-                        $"\"{Config.UI_2_AI_EVENT_TAGNAME}\" " +
-                        $"\"{Config.AI_2_UI_EVENT_TAGNAME}\" " +
-                        $"\"{Config.IMAGE_WIDTH}\" " +
-                        $"\"{Config.IMAGE_HEIGHT}\" " +
-                        $"\"{Config.s_isDebugMode}\" ",
+            Arguments = string.Format(
+                "\"{0}\" --input-mmf \"{1}\" --output-mmf \"{2}\" --map-size {3} --width {4} --height {5} --rx \"{6}\" --tx \"{7}\" --router \"{8}\" --worker-count {9} --image-interval {10} --queue-limit {11} --python \"{12}\"",
+                Config.s_brokerScriptPath,
+                Config.INPUT_MMF_TAGNAME,
+                Config.OUTPUT_MMF_TAGNAME,
+                Config.MAP_SIZE,
+                Config.IMAGE_WIDTH,
+                Config.IMAGE_HEIGHT,
+                Config.BROKER_RX_ENDPOINT,
+                Config.BROKER_TX_ENDPOINT,
+                Config.BROKER_ROUTER_ENDPOINT,
+                Config.WORKER_COUNT,
+                Config.IMAGE_INTERVAL,
+                Config.BUFFER_BOUND,
+                Config.s_pythonEnvPath),
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true
         };
 
-        Debug.WriteLine(Config.s_pythonEnvPath);
-
         Common.pythonProcess = new Process { StartInfo = psi };
-
-        Common.pythonProcess.OutputDataReceived += (p_s, p_outArgs) =>
+        Common.pythonProcess.OutputDataReceived += (sender, args) =>
         {
-            if (p_outArgs.Data != null)
-                if (Config.s_isDebugMode)
-                    Console.WriteLine("[PY] " + p_outArgs.Data);
+            if (Config.s_isDebugMode && args.Data != null)
+                Console.WriteLine("[PY] " + args.Data);
         };
-
-        Common.pythonProcess.ErrorDataReceived += (p_s, p_errArgs) =>
+        Common.pythonProcess.ErrorDataReceived += (sender, args) =>
         {
-            if (p_errArgs.Data != null)
-                Console.WriteLine("[ERROR] [PY] " + p_errArgs.Data);
+            if (args.Data != null)
+                Console.WriteLine("[ERROR] [PY] " + args.Data);
         };
-
         Common.pythonProcess.Start();
         Common.pythonProcess.BeginOutputReadLine();
         Common.pythonProcess.BeginErrorReadLine();
     }
 
-
-
     public static void warmUpAI()
     {
-        // Ensure IPC resources are initialized before using Common.mmf and events.
-        Stone_Application.IPC.IPCServices.getInstance();
-
-        if (Common.mmf == null)
-        {
-            Console.WriteLine("[ERROR] IPC not initialized — MemoryMappedFile is null. Aborting warm-up.");
-            return;
-        }
-
-        if (Common.ui2aiEvent == null || Common.ai2uiEvent == null)
-        {
-            Console.WriteLine("[ERROR] IPC events not initialized. Aborting warm-up.");
-            return;
-        }
-
-        using (Image originalImage = Image.FromFile(Config.s_tempImagePath))
-        using (Bitmap originalBitMap = new Bitmap(
-                                                    originalImage,
-                                                    Config.IMAGE_WIDTH,
-                                                    Config.IMAGE_HEIGHT))
-        {
-            for (int i = 20; i > 0; i--)
-            {
-                using (MemoryMappedViewStream stream =
-                    Common.mmf.CreateViewStream(Config.WRITE_OFFSET, Config.WRITE_READ_SIZE))
-                using (BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, false))
-                {
-                    BitmapData data = originalBitMap.LockBits(
-                        new Rectangle(0, 0, Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT),
-                        ImageLockMode.ReadOnly,
-                        PixelFormat.Format24bppRgb);
-
-                    try
-                    {
-                        int bytesLen = Math.Abs(data.Stride) * Config.IMAGE_HEIGHT;
-                        byte[] bytes = new byte[bytesLen];
-                        Marshal.Copy(data.Scan0, bytes, 0, bytesLen);
-
-                        writer.Write(bytes);
-                    }
-                    finally
-                    {
-                        originalBitMap.UnlockBits(data);
-                    }
-                }
-
-                Common.ui2aiEvent.Set();
-
-                if (!Common.ai2uiEvent.WaitOne(TimeSpan.FromSeconds(5)))
-                {
-                    Console.WriteLine("[ERROR] AI warm-up timeout");
-                    break;
-                }
-
-                Console.WriteLine($"[INFO] [UI-AI] AI Warm-up Count: {i}");
-            }
-        }
-
-        Console.WriteLine("[INFO] [UI-AI] AI Warm-up finished");
+        // Each worker loads and warms its own model before announcing READY.
+        Thread.Sleep(500);
     }
-
 
     public static void aiClosing()
     {
@@ -138,14 +59,25 @@ public sealed class AIHelper
         {
             try
             {
-                Common.pythonProcess.Kill();
-                Common.pythonProcess.WaitForExit();
-                Console.WriteLine("[INFO] [UI-AI] AI process terminated.");
+                using (var killer = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "taskkill.exe",
+                    Arguments = string.Format("/PID {0} /T /F", Common.pythonProcess.Id),
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                }))
+                {
+                    killer.WaitForExit(5000);
+                }
+                Common.pythonProcess.WaitForExit(5000);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] [UI-AI] AI process terminated failed\n{ex.Message}");
+                Console.WriteLine("[WARN] [AI] Failed to stop broker: " + ex.Message);
             }
         }
+        Common.pythonProcess = null;
     }
 }
