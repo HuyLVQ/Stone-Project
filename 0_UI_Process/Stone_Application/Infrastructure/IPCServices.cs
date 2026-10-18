@@ -18,6 +18,8 @@ namespace Stone_Application.IPC
         private int m_nextSlot;
         private int m_latestSlot = -1;
         private int m_inferenceSlot = -1;
+        private bool m_sessionActive;
+        private readonly ManualResetEventSlim m_noInferenceInFlight = new ManualResetEventSlim(true);
 
         private IPCServices()
         {
@@ -74,13 +76,55 @@ namespace Stone_Application.IPC
             return s_instance;
         }
 
-        public void captureFrame(byte[] p_image)
+        public void beginSession()
+        {
+            lock (m_ringLock)
+            {
+                if (m_inferenceSlot >= 0)
+                    throw new InvalidOperationException("Cannot begin a session while an inference is in flight.");
+
+                m_nextSlot = 0;
+                m_latestSlot = -1;
+                m_sessionActive = true;
+            }
+        }
+
+        // STOP first prevents new frames/dispatches, then waits for the already
+        // dispatched request to finish before it erases either shared-memory region.
+        public void endSessionAndClear()
+        {
+            lock (m_ringLock)
+            {
+                m_sessionActive = false;
+            }
+
+            m_noInferenceInFlight.Wait();
+
+            lock (m_ringLock)
+            {
+                clearSharedMemory();
+                m_nextSlot = 0;
+                m_latestSlot = -1;
+                m_inferenceSlot = -1;
+            }
+        }
+
+        public bool isSessionActive()
+        {
+            lock (m_ringLock)
+                return m_sessionActive;
+        }
+
+        public bool captureFrame(byte[] p_image)
         {
             if (p_image == null || p_image.Length != Config.IMAGE_BYTE_COUNT)
                 throw new ArgumentException("Camera frame size does not match the configured image dimensions.", nameof(p_image));
 
             lock (m_ringLock)
             {
+                if (!m_sessionActive)
+                    return false;
+
                 // Do not overwrite the slot the AI process is currently reading.
                 int slot = m_nextSlot;
                 for (int i = 0; i < Config.IMAGE_BUFFER_SLOT_COUNT; i++)
@@ -100,6 +144,7 @@ namespace Stone_Application.IPC
 
                 m_latestSlot = slot;
                 m_nextSlot = (slot + 1) % Config.IMAGE_BUFFER_SLOT_COUNT;
+                return true;
             }
         }
 
@@ -108,10 +153,11 @@ namespace Stone_Application.IPC
             lock (m_ringLock)
             {
                 p_slot = m_latestSlot;
-                if (p_slot < 0 || m_inferenceSlot >= 0)
+                if (!m_sessionActive || p_slot < 0 || m_inferenceSlot >= 0)
                     return false;
 
                 m_inferenceSlot = p_slot;
+                m_noInferenceInFlight.Reset();
                 return true;
             }
         }
@@ -121,7 +167,29 @@ namespace Stone_Application.IPC
             lock (m_ringLock)
             {
                 if (m_inferenceSlot == p_slot)
+                {
                     m_inferenceSlot = -1;
+                    m_noInferenceInFlight.Set();
+                }
+            }
+        }
+
+        private void clearSharedMemory()
+        {
+            if (Common.mmf == null)
+                return;
+
+            byte[] zeroBytes = new byte[64 * 1024];
+            using (MemoryMappedViewStream stream = Common.mmf.CreateViewStream(0, Config.MAP_SIZE, MemoryMappedFileAccess.ReadWrite))
+            {
+                long bytesRemaining = Config.MAP_SIZE;
+                while (bytesRemaining > 0)
+                {
+                    int length = (int)Math.Min(zeroBytes.Length, bytesRemaining);
+                    stream.Write(zeroBytes, 0, length);
+                    bytesRemaining -= length;
+                }
+                stream.Flush();
             }
         }
 

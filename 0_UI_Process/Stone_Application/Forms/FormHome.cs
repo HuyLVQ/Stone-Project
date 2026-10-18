@@ -84,8 +84,10 @@ namespace Stone_Application.Forms
 
         private void startButtonClick(object sender, EventArgs e)
         {
+            Stone_Application.IPC.IPCServices.getInstance().beginSession();
             Common.StartPostgreSqlSession();
             Common.videoRecorder.StartSession();
+            Common.s_stopWatchMain.Restart();
             enableStreaming();
             lock (Common.s_lockState)
             {
@@ -101,6 +103,10 @@ namespace Stone_Application.Forms
                 Common.s_currentState = Common.currentState.READY;
             }
 
+            // This blocks only until a request that was already sent to the live
+            // AI process has completed and been discarded. It is then safe to
+            // erase both shared-memory regions before the offline pass starts.
+            Stone_Application.IPC.IPCServices.getInstance().endSessionAndClear();
             string videoPath = Common.videoRecorder.StopSession();
             //Common.s_imageQueue = new BlockingCollection<Stone_Application.Event.IImage>(new ConcurrentQueue<Stone_Application.Event.IImage>(), Config.BUFFER_BOUND);
             while (Common.s_imageQueue.TryTake(out _))

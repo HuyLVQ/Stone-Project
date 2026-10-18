@@ -76,8 +76,8 @@ namespace Stone_Application.CameraClass
 
                         m_converter.Convert(imageData.recvImage, result);
 
-                        IPCServices.getInstance().captureFrame(imageData.recvImage);
-                        Common.videoRecorder.Append(imageData.recvImage);
+                        if (IPCServices.getInstance().captureFrame(imageData.recvImage))
+                            Common.videoRecorder.Append(imageData.recvImage);
 
                         if (Config.s_isDebugMode) {
                             Console.WriteLine("[INFO] [CAMERA] Image is captured successfully");
