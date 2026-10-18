@@ -122,6 +122,17 @@ namespace Stone_Application.Forms
             try
             {
                 AIHelper.VideoInferenceResult result = AIHelper.runVideoInference(videoPath);
+                Common.PersistFinalSessionResult(new Stone_Application.Event.IInformation
+                {
+                    countMiSang = checked((long)Math.Round(result.MiSang)),
+                    count1x2 = checked((long)Math.Round(result.OneByTwo)),
+                    count2x4 = checked((long)Math.Round(result.TwoByFour)),
+                    count4x6 = checked((long)Math.Round(result.FourBySix)),
+                    measuredWeight1 = checked((float)result.AverageWeights[0]),
+                    measuredWeight2 = checked((float)result.AverageWeights[1]),
+                    measuredWeight3 = checked((float)result.AverageWeights[2]),
+                    measuredWeight4 = checked((float)result.AverageWeights[3])
+                });
                 MessageBox.Show(this, FormatVideoInferenceResult(result), "Video inference result", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)

@@ -85,6 +85,26 @@ public static class Common
             }
         }
 
+        // Live measurements remain useful runtime telemetry. The offline video
+        // aggregate is persisted separately as the session's export authority.
+        public static void PersistFinalSessionResult(IInformation p_information)
+        {
+            PostgreSqlRepository repository = s_repositoryInstance as PostgreSqlRepository;
+            if (repository == null)
+                throw new InvalidOperationException("Offline session results require the PostgreSQL repository.");
+
+            lock (s_lockSession)
+            {
+                if (s_currentSessionId <= 0)
+                    throw new InvalidOperationException("No active session is available for the offline result.");
+
+                p_information.sessionId = s_currentSessionId;
+                p_information.isStartOfSession = false;
+            }
+
+            repository.SaveFinalSessionResult(p_information);
+        }
+
         public static void ResetRepository()
         {
             s_repositoryInstance.reset();
