@@ -139,7 +139,7 @@ namespace Stone_Application
 
             this.m_cleanupStarted = true;
 
-            RunCleanupAction("video recording", Common.videoRecorder.StopSession);
+            RunCleanupAction("video recording", () => Common.videoRecorder.StopSession());
             RunCleanupAction("threads", Infrastructure.MultiThread.StopAll);
             RunCleanupAction("application resources", FormSettings.CleanupAllResources);
             RunCleanupAction("measurement database", Common.ResetRepository);

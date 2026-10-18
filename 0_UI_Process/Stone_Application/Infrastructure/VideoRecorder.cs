@@ -13,6 +13,7 @@ public sealed class VideoRecorder : IDisposable
     private BinaryWriter m_writer;
     private long m_riffSizeOffset, m_moviSizeOffset, m_moviDataOffset, m_frameCountOffset, m_streamLengthOffset;
     private readonly List<AviIndexEntry> m_index = new List<AviIndexEntry>();
+    public string LastCompletedPath { get; private set; }
 
     public void StartSession()
     {
@@ -22,6 +23,7 @@ public sealed class VideoRecorder : IDisposable
             Directory.CreateDirectory(Config.s_videoOutputPath);
             string filename = "session_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ".avi";
             m_stream = new FileStream(Path.Combine(Config.s_videoOutputPath, filename), FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            LastCompletedPath = null;
             m_writer = new BinaryWriter(m_stream);
             WriteHeader();
             Console.WriteLine("[INFO] [VIDEO] Recording " + m_stream.Name);
@@ -43,11 +45,12 @@ public sealed class VideoRecorder : IDisposable
         }
     }
 
-    public void StopSession()
+    public string StopSession()
     {
         lock (m_lock)
         {
-            if (m_writer == null) return;
+            if (m_writer == null) return LastCompletedPath;
+            string completedPath = m_stream.Name;
             long moviEnd = m_stream.Position;
             WriteFourCC("idx1");
             m_writer.Write(m_index.Count * 16);
@@ -61,6 +64,8 @@ public sealed class VideoRecorder : IDisposable
             PatchInt32(m_streamLengthOffset, m_index.Count);
             PatchInt32(m_riffSizeOffset, checked((int)(fileEnd - 8)));
             m_writer.Dispose(); m_stream.Dispose(); m_writer = null; m_stream = null; m_index.Clear();
+            LastCompletedPath = completedPath;
+            return LastCompletedPath;
         }
     }
 
