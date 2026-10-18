@@ -15,6 +15,61 @@ using Stone_Application;
 
 public sealed class AIHelper
 {
+    public sealed class VideoInferenceResult
+    {
+        public int FrameCount { get; set; }
+        public double MiSang { get; set; }
+        public double OneByTwo { get; set; }
+        public double TwoByFour { get; set; }
+        public double FourBySix { get; set; }
+        public double[] AverageWeights { get; set; }
+    }
+
+    public static VideoInferenceResult runVideoInference(string p_videoPath)
+    {
+        if (String.IsNullOrWhiteSpace(p_videoPath) || !File.Exists(p_videoPath))
+            throw new FileNotFoundException("The finalized recording could not be found.", p_videoPath);
+
+        ProcessStartInfo psi = new ProcessStartInfo
+        {
+            FileName = Config.s_pythonEnvPath,
+            Arguments = "\"" + Config.s_videoInferenceScriptPath + "\" \"" + p_videoPath + "\"",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
+        using (Process process = Process.Start(psi))
+        {
+            Task<string> errorTask = process.StandardError.ReadToEndAsync();
+            string output = process.StandardOutput.ReadToEnd();
+            string error = errorTask.GetAwaiter().GetResult();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException("Video inference failed: " + error);
+
+            string resultLine = output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                                      .LastOrDefault(p_line => p_line.StartsWith("VIDEO_RESULT|"));
+            if (resultLine == null)
+                throw new InvalidOperationException("Video inference did not return a result. " + error);
+
+            Dictionary<string, double> values = resultLine.Split('|').Skip(1)
+                .Select(p_value => p_value.Split('='))
+                .ToDictionary(p_parts => p_parts[0], p_parts => Double.Parse(p_parts[1], System.Globalization.CultureInfo.InvariantCulture));
+
+            return new VideoInferenceResult
+            {
+                FrameCount = (int)values["frames"],
+                MiSang = values["MiSang"],
+                OneByTwo = values["1x2"],
+                TwoByFour = values["2x4"],
+                FourBySix = values["4x6"],
+                AverageWeights = new[] { values["weight1"], values["weight2"], values["weight3"], values["weight4"] }
+            };
+        }
+    }
+
     public static void initializeAI()
     {
 

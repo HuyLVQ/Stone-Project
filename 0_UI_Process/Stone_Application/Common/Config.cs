@@ -28,6 +28,7 @@ public static class Config
 
     public static readonly string s_pythonEnvPath = Path.Combine(s_rootPath, "1_AI_Process", ".venv", "Scripts", "python.exe");
     public static readonly string s_pythonScriptPath = Path.Combine(s_rootPath, "1_AI_Process", "src", "main.py");
+    public static readonly string s_videoInferenceScriptPath = Path.Combine(s_rootPath, "1_AI_Process", "src", "video_inference.py");
     public static readonly string s_tempImagePath = Path.Combine(s_rootPath, "1_AI_Process", "test_img.jpg");
 
     public static readonly string s_templateDir = Path.Combine(s_rootPath, "0_UI_Process", "Stone_Application", "PDF_Reference");

@@ -101,12 +101,42 @@ namespace Stone_Application.Forms
                 Common.s_currentState = Common.currentState.READY;
             }
 
-            Common.videoRecorder.StopSession();
+            string videoPath = Common.videoRecorder.StopSession();
             //Common.s_imageQueue = new BlockingCollection<Stone_Application.Event.IImage>(new ConcurrentQueue<Stone_Application.Event.IImage>(), Config.BUFFER_BOUND);
             while (Common.s_imageQueue.TryTake(out _))
             {
                 ;
             }
+
+            // The offline pass is deliberately synchronous: a new recording cannot begin
+            // until the finalized recording has become the authoritative result.
+            this.m_startButton.Enabled = false;
+            this.m_stopButton.Enabled = false;
+            this.UseWaitCursor = true;
+            try
+            {
+                AIHelper.VideoInferenceResult result = AIHelper.runVideoInference(videoPath);
+                MessageBox.Show(this, FormatVideoInferenceResult(result), "Video inference result", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "The recording was finalized, but video inference failed.\n\n" + ex.Message,
+                    "Video inference error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                this.UseWaitCursor = false;
+                this.m_startButton.Enabled = true;
+                this.m_startButton.ForeColor = System.Drawing.SystemColors.ControlText;
+            }
+        }
+
+        private static string FormatVideoInferenceResult(AIHelper.VideoInferenceResult p_result)
+        {
+            return String.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "Frames processed: {0}\n\nAccumulated counts\n  MiSang: {1:F0}\n  1x2: {2:F0}\n  2x4: {3:F0}\n  4x6: {4:F0}\n\nAverage per-frame weights\n  Polynomial: {5:F2}\n  Random forest: {6:F2}\n  XGBoost: {7:F2}\n  XGBoost v2: {8:F2}",
+                p_result.FrameCount, p_result.MiSang, p_result.OneByTwo, p_result.TwoByFour, p_result.FourBySix,
+                p_result.AverageWeights[0], p_result.AverageWeights[1], p_result.AverageWeights[2], p_result.AverageWeights[3]);
         }
     }
 }
