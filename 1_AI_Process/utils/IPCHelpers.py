@@ -12,7 +12,7 @@ import logging
 
 from utils.config import  MMF_TAGNAME, MMF_TIMEOUT, UI_2_AI_EVENT_TAGNAME, AI_2_UI_EVENT_TAGNAME, \
                           IMAGE_WIDTH, IMAGE_HEIGHT, \
-                          WRITE_OFFSET, READ_OFFSET, MEMORY_ALLOCATION, IS_DEBUG_MODE, \
+                          WRITE_OFFSET, READ_OFFSET, MEMORY_ALLOCATION, IS_DEBUG_MODE, IMAGE_HEADER_SIZE, IMAGE_BYTE_COUNT, \
                           TYPE_COLORS
 
 class IPCHelper():
@@ -55,8 +55,11 @@ class IPCHelper():
             win32event.WaitForSingleObject(self.m_UI2AIEvent, MMF_TIMEOUT)
             
             self.m_hmap.seek(WRITE_OFFSET)
-            
-            rawBytes = self.m_hmap.read(IMAGE_WIDTH * IMAGE_HEIGHT * 3)
+            slot = struct.unpack('<i', self.m_hmap.read(4))[0]
+            if slot < 0 or slot >= 5:
+                raise ValueError(f"Invalid shared-memory image slot: {slot}")
+            self.m_hmap.seek(WRITE_OFFSET + IMAGE_HEADER_SIZE + slot * IMAGE_BYTE_COUNT)
+            rawBytes = self.m_hmap.read(IMAGE_BYTE_COUNT)
             imageConvert = np.frombuffer(rawBytes,
                                          dtype=np.uint8
                                         ).reshape((IMAGE_HEIGHT, IMAGE_WIDTH, 3))

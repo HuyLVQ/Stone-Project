@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using Basler.Pylon;
+using Stone_Application.IPC;
 
 namespace Stone_Application.CameraClass
 {
@@ -75,7 +76,8 @@ namespace Stone_Application.CameraClass
 
                         m_converter.Convert(imageData.recvImage, result);
 
-                        Common.s_imageQueue.Add(imageData, p_cancellationToken);
+                        IPCServices.getInstance().captureFrame(imageData.recvImage);
+                        Common.videoRecorder.Append(imageData.recvImage);
 
                         if (Config.s_isDebugMode) {
                             Console.WriteLine("[INFO] [CAMERA] Image is captured successfully");

@@ -35,9 +35,6 @@ namespace Stone_Application.Infrastructure
 
                 s_thread1Task = Task.Run(() =>
                 {
-                    int[] temporaryStorage = new int[2];
-                    int encoderFeedback = 0;
-
                     while (!token.IsCancellationRequested)
                     {
                         try
@@ -54,19 +51,8 @@ namespace Stone_Application.Infrastructure
                                 }
                             }
 
-                            if (Common.s_stopWatchMain.ElapsedMilliseconds >= Config.TIME_INTERVAL)
-                            {
-                                Common.s_stopWatchMain.Restart();
-
-                                if (Config.s_isDebugMode == true) {
-                                    Console.WriteLine("[INFO] [THREAD #1] New Thread 1 cycle...");
-                                    Console.WriteLine("[INFO] [THREAD #1] Camera capture...");
-                                }
-
-                                Common.camera.cameraCapture(token);
-                            }
-                            // small delay to avoid busy spin if interval is very small
-                            Thread.Sleep(1);
+                            // Capture is deliberately independent of inference cadence.
+                            Common.camera.cameraCapture(token);
                             //Console.WriteLine("[INFO] [THREAD #1] Exiting thread.");
                         }
                         catch (OperationCanceledException)
@@ -116,16 +102,18 @@ namespace Stone_Application.Infrastructure
                                 Console.WriteLine("[INFO] [THREAD #2] New Thread 2 cycle...");
                             }
 
-                            Event.IImage temporaryImage;
-                            try
+                            // Coalesce missed intervals: one in-flight AI request is supported by
+                            // the existing event protocol, and each due request uses the newest frame.
+                            long delay = Config.TIME_INTERVAL - Common.s_stopWatchMain.ElapsedMilliseconds;
+                            if (delay > 0)
                             {
-                                // BlockingCollection.Take supports cancellation token
-                                temporaryImage = Common.s_imageQueue.Take(token);
+                                if (token.WaitHandle.WaitOne((int)delay)) break;
                             }
-                            catch (OperationCanceledException)
-                            {
-                                break;
-                            }
+                            Common.s_stopWatchMain.Restart();
+
+                            int inferenceSlot;
+                            if (!ipcServices.tryAcquireLatestFrame(out inferenceSlot))
+                                continue;
 
                             if (Config.s_isDebugMode == true) {
                                 Console.WriteLine("[INFO] [THREAD #2] Image taken from queue...");
@@ -133,11 +121,12 @@ namespace Stone_Application.Infrastructure
 
                             try
                             {
-                                ipcServices.writeTask(temporaryImage);
+                                ipcServices.writeTask(inferenceSlot);
                             }
                             catch (Exception ex)
                             {
                                 Console.WriteLine("[ERROR] [THREAD #2] writeTask failed: " + ex.Message);
+                                ipcServices.releaseInferenceFrame(inferenceSlot);
                                 continue;
                             }
 
@@ -163,6 +152,7 @@ namespace Stone_Application.Infrastructure
                             }
 
                             IInformation temporaryInformation;
+                            Event.IImage temporaryImage;
                             try
                             {
                                 (temporaryInformation, temporaryImage) = ipcServices.readTask();
@@ -170,6 +160,7 @@ namespace Stone_Application.Infrastructure
                             catch (Exception ex)
                             {
                                 Console.WriteLine("[ERROR] [THREAD #2] readTask failed: " + ex.Message);
+                                ipcServices.releaseInferenceFrame(inferenceSlot);
                                 continue;
                             }
 
@@ -179,6 +170,7 @@ namespace Stone_Application.Infrastructure
 
                             aiProcessEvent.notifyImage(temporaryImage);
                             aiProcessEvent.notifyInformation(temporaryInformation);
+                            ipcServices.releaseInferenceFrame(inferenceSlot);
                         }
                     }
                     catch (OperationCanceledException)

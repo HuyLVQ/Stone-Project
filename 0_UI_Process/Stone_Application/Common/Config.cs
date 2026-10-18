@@ -15,6 +15,10 @@ public static class Config
     public const int IMAGE_HEIGHT = 1_200;                          // Image height of the camera
 
     public const int BUFFER_BOUND = 5;
+    public const int IMAGE_BUFFER_SLOT_COUNT = 5;
+    public const int IMAGE_BUFFER_HEADER_SIZE = 64;
+    public const int IMAGE_BYTE_COUNT = IMAGE_WIDTH * IMAGE_HEIGHT * 3;
+    public const int IMAGE_BUFFER_SIZE = IMAGE_BUFFER_HEADER_SIZE + IMAGE_BUFFER_SLOT_COUNT * IMAGE_BYTE_COUNT;
 
     public const int ENC_ADDR = 0;
     public const int SENSOR_ADDR = 0;
@@ -36,11 +40,18 @@ public static class Config
     public static readonly string s_outputPath = Path.Combine(s_templateDir, "Result_");
 
     public const string MMF_TAGNAME = "cam_01_map";
-    public const int MAP_SIZE = 20_000_000;
-    public const int WRITE_READ_SIZE = 9_999_999;
+    // Region #1 is a five-slot image ring. Region #2 retains its result layout,
+    // but begins after region #1 so the regions never overlap.
+    public const int RESULT_REGION_SIZE = 10_000_000;
+    public const int MAP_SIZE = IMAGE_BUFFER_SIZE + RESULT_REGION_SIZE;
     public const int WRITE_OFFSET = 0;
-    public const int READ_OFFSET = 10_000_000;
+    public const int READ_OFFSET = IMAGE_BUFFER_SIZE;
     public const int OFFSET_IMAGE = 100;
+
+    public const int VIDEO_FRAME_RATE = 30;
+    public static readonly string s_videoOutputPath =
+        Environment.GetEnvironmentVariable("STONE_VIDEO_OUTPUT_PATH") ??
+        Path.Combine(s_rootPath, "Recordings");
 
     public const string UI_2_AI_EVENT_TAGNAME = "cam_ui_wrote_event";
     public const string AI_2_UI_EVENT_TAGNAME = "cam_ai_wrote_event";

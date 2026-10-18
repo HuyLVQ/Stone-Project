@@ -94,7 +94,7 @@ public sealed class AIHelper
             for (int i = 20; i > 0; i--)
             {
                 using (MemoryMappedViewStream stream =
-                    Common.mmf.CreateViewStream(Config.WRITE_OFFSET, Config.WRITE_READ_SIZE))
+                    Common.mmf.CreateViewStream(Config.IMAGE_BUFFER_HEADER_SIZE, Config.IMAGE_BYTE_COUNT))
                 using (BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, false))
                 {
                     BitmapData data = originalBitMap.LockBits(
@@ -116,6 +116,10 @@ public sealed class AIHelper
                     }
                 }
 
+                // Warm-up always uses slot zero, following the same ring protocol as capture.
+                using (MemoryMappedViewStream header = Common.mmf.CreateViewStream(Config.WRITE_OFFSET, Config.IMAGE_BUFFER_HEADER_SIZE))
+                using (BinaryWriter writer = new BinaryWriter(header, Encoding.UTF8, false))
+                    writer.Write(0);
                 Common.ui2aiEvent.Set();
 
                 if (!Common.ai2uiEvent.WaitOne(TimeSpan.FromSeconds(5)))

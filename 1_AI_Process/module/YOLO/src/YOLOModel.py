@@ -24,8 +24,8 @@ class YOLOImpl():
     m_model = None
     m_weightsPath = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
-        "..",
-        "weight",
+        "..", "..", "..", "..",
+        "Weight_v2", "model", "YOLO",
         "best260719.pt"
     )
 
