@@ -102,6 +102,16 @@ namespace Stone_Application.Infrastructure
                                 Console.WriteLine("[INFO] [THREAD #2] New Thread 2 cycle...");
                             }
 
+                            lock (Common.s_lockState)
+                            {
+                                if (Common.s_currentState != Common.currentState.STREAMING || !ipcServices.isSessionActive())
+                                {
+                                    // No dispatch is permitted between STOP and the next START.
+                                    if (token.WaitHandle.WaitOne(100)) break;
+                                    continue;
+                                }
+                            }
+
                             // Coalesce missed intervals: one in-flight AI request is supported by
                             // the existing event protocol, and each due request uses the newest frame.
                             long delay = Config.TIME_INTERVAL - Common.s_stopWatchMain.ElapsedMilliseconds;
@@ -114,6 +124,15 @@ namespace Stone_Application.Infrastructure
                             int inferenceSlot;
                             if (!ipcServices.tryAcquireLatestFrame(out inferenceSlot))
                                 continue;
+
+                            lock (Common.s_lockState)
+                            {
+                                if (Common.s_currentState != Common.currentState.STREAMING || !ipcServices.isSessionActive())
+                                {
+                                    ipcServices.releaseInferenceFrame(inferenceSlot);
+                                    continue;
+                                }
+                            }
 
                             if (Config.s_isDebugMode == true) {
                                 Console.WriteLine("[INFO] [THREAD #2] Image taken from queue...");
@@ -168,8 +187,13 @@ namespace Stone_Application.Infrastructure
                                 Console.WriteLine("[INFO] [THREAD #2] AI results read from shared memory...");
                             }
 
-                            aiProcessEvent.notifyImage(temporaryImage);
-                            aiProcessEvent.notifyInformation(temporaryInformation);
+                            // A result that completed after STOP is intentionally discarded.
+                            // It must not update the database or UI of the finished session.
+                            if (ipcServices.isSessionActive())
+                            {
+                                aiProcessEvent.notifyImage(temporaryImage);
+                                aiProcessEvent.notifyInformation(temporaryInformation);
+                            }
                             ipcServices.releaseInferenceFrame(inferenceSlot);
                         }
                     }
