@@ -7,8 +7,12 @@ IMAGE_WIDTH, IMAGE_HEIGHT = int(sys.argv[4]), int(sys.argv[5])
 IS_DEBUG_MODE = len(sys.argv) > 6 and sys.argv[6].lower() == "true"
 
 WRITE_OFFSET = 0                                ## Offset value from the beginning address of shared memory region
-READ_OFFSET = 10_000_000                        ## Offset value from the beginning address of shared memory region
-MEMORY_ALLOCATION = 20_000_000                  ## Total memory allocated for MMF IPC
+IMAGE_SLOT_COUNT = 5
+IMAGE_HEADER_SIZE = 64
+IMAGE_BYTE_COUNT = IMAGE_WIDTH * IMAGE_HEIGHT * 3
+IMAGE_BUFFER_SIZE = IMAGE_HEADER_SIZE + IMAGE_SLOT_COUNT * IMAGE_BYTE_COUNT
+READ_OFFSET = IMAGE_BUFFER_SIZE                  ## Region #2 retains its existing internal layout
+MEMORY_ALLOCATION = IMAGE_BUFFER_SIZE + 10_000_000
 MMF_TIMEOUT = 10_000_000
 
 RATIO_SCALE = 1/18.82

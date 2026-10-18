@@ -98,7 +98,7 @@ def fit_linear(X, y):
     print(f"Sai số RMSE:           {rmse_result:.4f} kg")
     print(f"Độ lệch tuyệt đối MAE: {mae_results:.4f} kg")
 
-    save_path = r'D:\CODE\LAB\Project_Stone\Weight\model\Linear_Regression\linear.pkl'
+    save_path = r'D:\CODE\LAB\Project_Stone\Weight_v2\model\Linear_Regression\linear.pkl'
     joblib.dump(model, save_path)   
 
 def fit_poly(X, y):
@@ -118,7 +118,7 @@ def fit_poly(X, y):
     print(f"Sai số RMSE:           {rmse_result:.4f} kg")
     print(f"Độ lệch tuyệt đối MAE: {mae_results:.4f} kg")
 
-    save_path = r'D:\CODE\LAB\Project_Stone\Weight\model\Polynominal_Regression\poly.pkl'
+    save_path = r'D:\CODE\LAB\Project_Stone\Weight_v2\model\Polynominal_Regression\poly.pkl'
     joblib.dump(model, save_path)   
 
 class ManualRidgeRegression:
@@ -168,7 +168,7 @@ def fit_random_forest(X, y):
     print(f"Sai số RMSE:           {rmse_result:.4f} kg")
     print(f"Độ lệch tuyệt đối MAE: {mae_results:.4f} kg")
 
-    save_path = r'D:\CODE\LAB\Project_Stone\Weight\model\Random_Forest\rf.pkl'
+    save_path = r'D:\CODE\LAB\Project_Stone\Weight_v2\model\Random_Forest\rf.pkl'
     joblib.dump(model, save_path)
 
 def fit_xgboost(X, y):
@@ -196,5 +196,5 @@ def fit_xgboost(X, y):
     print(f"Sai số RMSE:           {rmse_result:.4f} kg")
     print(f"Độ lệch tuyệt đối MAE: {mae_results:.4f} kg")
 
-    save_path = r'D:\CODE\LAB\Project_Stone\Weight\model\XGBoost\xgboost.pkl'
+    save_path = r'D:\CODE\LAB\Project_Stone\Weight_v2\model\XGBoost\xgboost.pkl'
     joblib.dump(model, save_path)

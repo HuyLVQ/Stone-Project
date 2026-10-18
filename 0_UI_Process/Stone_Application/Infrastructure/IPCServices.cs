@@ -14,6 +14,10 @@ namespace Stone_Application.IPC
     public class IPCServices
     {
         private static IPCServices s_instance;
+        private readonly object m_ringLock = new object();
+        private int m_nextSlot;
+        private int m_latestSlot = -1;
+        private int m_inferenceSlot = -1;
 
         private IPCServices()
         {
@@ -70,20 +74,67 @@ namespace Stone_Application.IPC
             return s_instance;
         }
 
-        public void writeTask(IImage p_image)
+        public void captureFrame(byte[] p_image)
         {
-            using (MemoryMappedViewStream stream = Common.mmf.CreateViewStream(Config.WRITE_OFFSET, Config.WRITE_READ_SIZE))
+            if (p_image == null || p_image.Length != Config.IMAGE_BYTE_COUNT)
+                throw new ArgumentException("Camera frame size does not match the configured image dimensions.", nameof(p_image));
+
+            lock (m_ringLock)
             {
-                using (BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, false))
+                // Do not overwrite the slot the AI process is currently reading.
+                int slot = m_nextSlot;
+                for (int i = 0; i < Config.IMAGE_BUFFER_SLOT_COUNT; i++)
                 {
-                    writer.Write(p_image.recvImage);
+                    int candidate = (m_nextSlot + i) % Config.IMAGE_BUFFER_SLOT_COUNT;
+                    if (candidate != m_inferenceSlot)
+                    {
+                        slot = candidate;
+                        break;
+                    }
                 }
+
+                long offset = Config.WRITE_OFFSET + Config.IMAGE_BUFFER_HEADER_SIZE + (long)slot * Config.IMAGE_BYTE_COUNT;
+                using (MemoryMappedViewStream stream = Common.mmf.CreateViewStream(offset, Config.IMAGE_BYTE_COUNT))
+                using (BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, false))
+                    writer.Write(p_image);
+
+                m_latestSlot = slot;
+                m_nextSlot = (slot + 1) % Config.IMAGE_BUFFER_SLOT_COUNT;
             }
+        }
+
+        public bool tryAcquireLatestFrame(out int p_slot)
+        {
+            lock (m_ringLock)
+            {
+                p_slot = m_latestSlot;
+                if (p_slot < 0 || m_inferenceSlot >= 0)
+                    return false;
+
+                m_inferenceSlot = p_slot;
+                return true;
+            }
+        }
+
+        public void releaseInferenceFrame(int p_slot)
+        {
+            lock (m_ringLock)
+            {
+                if (m_inferenceSlot == p_slot)
+                    m_inferenceSlot = -1;
+            }
+        }
+
+        public void writeTask(int p_slot)
+        {
+            using (MemoryMappedViewStream stream = Common.mmf.CreateViewStream(Config.WRITE_OFFSET, Config.IMAGE_BUFFER_HEADER_SIZE))
+            using (BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, false))
+                writer.Write(p_slot);
         }
 
         public (IInformation, IImage) readTask()
         { 
-            using (MemoryMappedViewStream stream = Common.mmf.CreateViewStream(Config.READ_OFFSET, Config.WRITE_READ_SIZE))
+            using (MemoryMappedViewStream stream = Common.mmf.CreateViewStream(Config.READ_OFFSET, Config.RESULT_REGION_SIZE))
             {
 
                 using (BinaryReader reader = new BinaryReader(stream, Encoding.UTF8, false))

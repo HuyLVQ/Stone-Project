@@ -44,6 +44,7 @@ public static class Common
 
         public static EventWaitHandle ui2aiEvent { get; set; }
         public static EventWaitHandle ai2uiEvent { get; set; }
+        public static VideoRecorder videoRecorder { get; } = new VideoRecorder();
         
     
         public static readonly BlockingCollection<Stone_Application.Event.IInformation> s_informationQueue = new BlockingCollection<IInformation>(new ConcurrentQueue<Stone_Application.Event.IInformation>(), Config.BUFFER_BOUND);
