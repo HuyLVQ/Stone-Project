@@ -101,7 +101,7 @@ Python result block -> UI result worker -> AIProcessEvent observers
                                       -> image/UI observers
 ```
 
-Offline video results are currently displayed in the final MessageBox. They are not automatically persisted as an additional database record.
+Offline video results are persisted as the authoritative finalized record for the session. Excel export selects only these finalized records, not the live per-frame snapshots collected during streaming.
 
 ## Configuration
 

@@ -54,6 +54,7 @@ namespace Stone_Application.Repository
                     "    measured_weight3 REAL NOT NULL," +
                     "    measured_weight4 REAL NOT NULL," +
                     "    isStartOfSession BOOLEAN NOT NULL DEFAULT FALSE," +
+                    "    isFinalizedResult BOOLEAN NOT NULL DEFAULT FALSE," +
                     "    sessionId INTEGER NOT NULL DEFAULT 0," +
                     "    recorded_at TIMESTAMP NOT NULL DEFAULT NOW()" +
                     ");";
@@ -71,6 +72,8 @@ namespace Stone_Application.Repository
                         " ADD COLUMN IF NOT EXISTS isStartOfSession BOOLEAN NOT NULL DEFAULT FALSE;" +
                         " ALTER TABLE " + m_TABLE_NAME +
                         " ADD COLUMN IF NOT EXISTS sessionId INTEGER NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME +
+                        " ADD COLUMN IF NOT EXISTS isFinalizedResult BOOLEAN NOT NULL DEFAULT FALSE;" +
                         " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight1 REAL NOT NULL DEFAULT 0;" +
                         " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight2 REAL NOT NULL DEFAULT 0;" +
                         " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight3 REAL NOT NULL DEFAULT 0;" +
@@ -186,6 +189,49 @@ namespace Stone_Application.Repository
             ;
         }
 
+        // This writes the authoritative offline-video aggregate without applying
+        // the live-row accumulation behavior used by add(). Only one final row is
+        // retained for a session so Excel can select it unambiguously.
+        public void SaveFinalSessionResult(IInformation p_entity)
+        {
+            lock (m_sessionLock)
+            {
+                using (var conn = new NpgsqlConnection(m_connectionString))
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        using (var deleteCmd = new NpgsqlCommand(
+                            "DELETE FROM " + m_TABLE_NAME +
+                            " WHERE sessionId = @sessionId AND isFinalizedResult = TRUE;", conn, transaction))
+                        {
+                            deleteCmd.Parameters.AddWithValue("sessionId", p_entity.sessionId);
+                            deleteCmd.ExecuteNonQuery();
+                        }
+
+                        using (var insertCmd = new NpgsqlCommand(
+                            "INSERT INTO " + m_TABLE_NAME +
+                            " (countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4, isStartOfSession, isFinalizedResult, sessionId, recorded_at)" +
+                            " VALUES (@miSang, @p1x2, @p2x4, @p4x6, @weight1, @weight2, @weight3, @weight4, FALSE, TRUE, @sessionId, NOW());", conn, transaction))
+                        {
+                            insertCmd.Parameters.AddWithValue("miSang", p_entity.countMiSang);
+                            insertCmd.Parameters.AddWithValue("p1x2", p_entity.count1x2);
+                            insertCmd.Parameters.AddWithValue("p2x4", p_entity.count2x4);
+                            insertCmd.Parameters.AddWithValue("p4x6", p_entity.count4x6);
+                            insertCmd.Parameters.AddWithValue("weight1", p_entity.measuredWeight1);
+                            insertCmd.Parameters.AddWithValue("weight2", p_entity.measuredWeight2);
+                            insertCmd.Parameters.AddWithValue("weight3", p_entity.measuredWeight3);
+                            insertCmd.Parameters.AddWithValue("weight4", p_entity.measuredWeight4);
+                            insertCmd.Parameters.AddWithValue("sessionId", p_entity.sessionId);
+                            insertCmd.ExecuteNonQuery();
+                        }
+
+                        transaction.Commit();
+                    }
+                }
+            }
+        }
+
         public IResultInformation getTotal()
         {
             string sql =
@@ -290,12 +336,12 @@ namespace Stone_Application.Repository
 
         public List<IInformation> getSessionMeasurements()
         {
-            // Each database row is an accumulated snapshot. DISTINCT ON selects
-            // the newest snapshot for every session, yielding one export row per
-            // sub-session since the application began recording.
+            // Excel is sourced only from the finalized offline-video aggregate,
+            // never from the live inference snapshots recorded during a session.
             string sql =
                     "SELECT DISTINCT ON (sessionId) sessionId, countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4" +
                     " FROM " + m_TABLE_NAME +
+                    " WHERE isFinalizedResult = TRUE" +
                     " ORDER BY sessionId, recorded_at DESC;";
 
             var measurements = new List<IInformation>();
