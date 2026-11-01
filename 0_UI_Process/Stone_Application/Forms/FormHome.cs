@@ -101,7 +101,7 @@ namespace Stone_Application.Forms
             {
                 if (!AIHelper.IsLiveReady || Common.pythonProcess == null || Common.pythonProcess.HasExited)
                 { AIHelper.initializeAI(); AIHelper.warmUpAI(); }
-                AIHelper.InitializeOfflineWorker();
+                _ = AIHelper.InitializeOfflineWorkerAsync();
                 Common.StartPostgreSqlSession();
                 ipc.beginSession();
                 Common.videoRecorder.StartSession(ipc.SessionToken);

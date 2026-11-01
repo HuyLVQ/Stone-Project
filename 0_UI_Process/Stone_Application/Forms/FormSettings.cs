@@ -120,14 +120,15 @@ namespace Stone_Application.Forms
             this.m_buttonAI.Enabled = false;
             try
             {
+                _ = AIHelper.InitializeOfflineWorkerAsync();
                 await Task.Run(() =>
                 {
                     AIHelper.initializeAI();
                     AIHelper.warmUpAI();
-                    AIHelper.InitializeOfflineWorker();
                 });
                 FormHome.disableStreaming();
-                MessageBox.Show(this, "AI initialized sucessfully.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, "Live AI is ready. Offline video analysis is warming up in the background; STOP may wait for it to finish.",
+                    "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 this.m_buttonAI.ForeColor = System.Drawing.SystemColors.ButtonShadow;
                 Common.s_stopWatchMain.Start();
                 MultiThread.thread1Work();

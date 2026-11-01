@@ -8,12 +8,14 @@ if len(sys.argv) >= 6:
     AI_2_UI_EVENT_TAGNAME = sys.argv[3]
     IMAGE_WIDTH, IMAGE_HEIGHT = int(sys.argv[4]), int(sys.argv[5])
     IS_DEBUG_MODE = len(sys.argv) > 6 and sys.argv[6].lower() == "true"
+    AI_WARMUP_REQUESTS = int(sys.argv[7]) if len(sys.argv) > 7 else 0
 else:
     MMF_TAGNAME = None
     UI_2_AI_EVENT_TAGNAME = None
     AI_2_UI_EVENT_TAGNAME = None
     IMAGE_WIDTH, IMAGE_HEIGHT = 1920, 1200
     IS_DEBUG_MODE = False
+    AI_WARMUP_REQUESTS = 0
 
 WRITE_OFFSET = 0                                ## Offset value from the beginning address of shared memory region
 IMAGE_SLOT_COUNT = 5

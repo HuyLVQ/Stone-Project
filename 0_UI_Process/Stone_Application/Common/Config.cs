@@ -73,7 +73,7 @@ public static class Config
     public const int AI_STOP_TIMEOUT_MS = 15_000;
     public const int AI_EXIT_TIMEOUT_MS = 5_000;
     public const int AI_WARMUP_TIMEOUT_MS = 120_000;
-    public const int AI_WARMUP_ITERATIONS = 20;
+    public const int AI_WARMUP_ITERATIONS = 2;
     public const int VIDEO_DECODE_RECOVERY_LIMIT = 30;
     public static readonly string s_videoOutputPath =
         Environment.GetEnvironmentVariable("STONE_VIDEO_OUTPUT_PATH") ??

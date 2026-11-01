@@ -1,4 +1,3 @@
-import random
 import os
 import numpy as np
 import pandas as pd
@@ -8,13 +7,9 @@ from typing import Callable
 from ultralytics import YOLO
 import cv2
 import torch
-import torch.nn as nn
-from torchvision import models, transforms
-from PIL import Image
 
 from utils.config import RATIO_SCALE, TYPE_COLORS, IMAGE_HEIGHT, IMAGE_WIDTH, FEATURE_NAMES, IS_DEBUG_MODE
 
-from module.weightRegression.linearRegression.linearRegression import predictLinear
 from module.weightRegression.polynominalRegression.polynominalRegression import predictPoly
 from module.weightRegression.randomForest.randomForest import predictRandomForest
 from module.weightRegression.XGBoost.XGBoost import predictXGBoost, predictXGBoost_v2

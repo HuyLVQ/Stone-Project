@@ -22,6 +22,8 @@ public sealed class AIHelper
     private static Process s_offlineProcess;
     private static TaskCompletionSource<bool> s_offlineReady;
     private static TaskCompletionSource<string> s_offlineResponse;
+    private static Task s_offlineInitializationTask;
+    private static bool s_offlineStopRequested;
     public static bool IsLiveReady { get { return s_liveReady; } }
     public static void MarkUnavailable() { s_liveReady = false; }
     public sealed class VideoInferenceResult
@@ -42,6 +44,7 @@ public sealed class AIHelper
     {
         if (String.IsNullOrWhiteSpace(p_videoPath) || !File.Exists(p_videoPath))
             throw new FileNotFoundException("The finalized recording could not be found.", p_videoPath);
+        InitializeOfflineWorker();
         TaskCompletionSource<string> response;
         lock (s_offlineLock)
         {
@@ -70,12 +73,44 @@ public sealed class AIHelper
         return ParseVideoResult(resultLine);
     }
 
-    public static void InitializeOfflineWorker()
+    public static Task InitializeOfflineWorkerAsync()
     {
         lock (s_offlineLock)
         {
-            if (s_offlineProcess != null && !s_offlineProcess.HasExited && s_offlineReady != null && s_offlineReady.Task.IsCompleted)
+            if (s_offlineProcess != null && !s_offlineProcess.HasExited &&
+                s_offlineReady != null && s_offlineReady.Task.Status == TaskStatus.RanToCompletion)
+                return Task.CompletedTask;
+
+            if (s_offlineInitializationTask != null && !s_offlineInitializationTask.IsCompleted)
+                return s_offlineInitializationTask;
+
+            s_offlineStopRequested = false;
+            s_offlineInitializationTask = Task.Run((Action)InitializeOfflineWorkerCore);
+            s_offlineInitializationTask.ContinueWith(task =>
+            {
+                Exception error = task.Exception.GetBaseException();
+                if (!(error is OperationCanceledException))
+                    Console.WriteLine("[ERROR] Offline worker initialization failed: " + error.Message);
+            },
+                TaskContinuationOptions.OnlyOnFaulted);
+            return s_offlineInitializationTask;
+        }
+    }
+
+    public static void InitializeOfflineWorker()
+    {
+        InitializeOfflineWorkerAsync().GetAwaiter().GetResult();
+    }
+
+    private static void InitializeOfflineWorkerCore()
+    {
+        lock (s_offlineLock)
+        {
+            if (s_offlineProcess != null && !s_offlineProcess.HasExited && s_offlineReady != null &&
+                s_offlineReady.Task.Status == TaskStatus.RanToCompletion)
                 return;
+            if (s_offlineStopRequested)
+                throw new OperationCanceledException("Offline worker startup was canceled during application shutdown.");
             RequireFile(Config.s_pythonEnvPath, "Python environment executable");
             RequireFile(Config.s_offlineWorkerScriptPath, "Offline inference worker");
             s_offlineReady = new TaskCompletionSource<bool>();
@@ -144,7 +179,11 @@ public sealed class AIHelper
     public static void StopOfflineWorker()
     {
         Process process;
-        lock (s_offlineLock) process = s_offlineProcess;
+        lock (s_offlineLock)
+        {
+            s_offlineStopRequested = true;
+            process = s_offlineProcess;
+        }
         if (process == null) return;
         try
         {
@@ -216,7 +255,8 @@ public sealed class AIHelper
                         $"\"{Config.AI_2_UI_EVENT_TAGNAME}\" " +
                         $"\"{Config.IMAGE_WIDTH}\" " +
                         $"\"{Config.IMAGE_HEIGHT}\" " +
-                        $"\"{Config.s_isDebugMode}\" ",
+                        $"\"{Config.s_isDebugMode}\" " +
+                        $"\"{Config.AI_WARMUP_ITERATIONS}\"",
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
