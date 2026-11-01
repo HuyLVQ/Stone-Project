@@ -119,12 +119,6 @@ namespace Stone_Application.Forms
             s_instance.BeginInvoke(new Action(() =>
             {
                 if (s_instance.IsDisposed || !Stone_Application.IPC.IPCServices.getInstance().IsCurrentSession(p_information.liveSessionToken)) return;
-                if (s_instance.textBoxLogging.Text.Length == 0)
-                {
-                    s_instance.m_buttonExportPDF.Enabled = true;
-                    s_instance.m_buttonExportPDF.ForeColor = System.Drawing.SystemColors.ControlText;
-                }
-
                 AppendLogEntry(s_instance.textBoxLogging, p_information);
 
                 s_instance.textBoxLogging.SelectionStart =
@@ -132,6 +126,40 @@ namespace Stone_Application.Forms
 
                 s_instance.textBoxLogging.ScrollToCaret();
             }));
+        }
+
+        public void RefreshFinalizedResults()
+        {
+            if (this.IsDisposed || !this.IsHandleCreated)
+                return;
+
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke(new Action(RefreshFinalizedResults));
+                return;
+            }
+
+            try
+            {
+                List<IInformation> measurements = Common.s_repositoryInstance.getSessionMeasurements();
+                this.textBoxLogging.Clear();
+                foreach (IInformation measurement in measurements)
+                    AppendLogEntry(this.textBoxLogging, measurement);
+
+                this.m_buttonExportPDF.Enabled = measurements.Count > 0;
+                this.m_buttonExportPDF.ForeColor = measurements.Count > 0
+                    ? System.Drawing.SystemColors.ControlText
+                    : System.Drawing.SystemColors.ActiveBorder;
+
+                this.textBoxLogging.SelectionStart = this.textBoxLogging.TextLength;
+                this.textBoxLogging.ScrollToCaret();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Could not refresh finalized session results: " + ex.Message);
+                this.m_buttonExportPDF.Enabled = false;
+                this.m_buttonExportPDF.ForeColor = System.Drawing.SystemColors.ActiveBorder;
+            }
         }
 
         private void buttonExportPDFClick(object p_sender, EventArgs p_e)

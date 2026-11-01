@@ -100,6 +100,7 @@ namespace Stone_Application
             this.m_panelLoad.Controls.Clear();
             this.m_panelLoad.Controls.Add(this.m_formLogsInstance);
             this.m_formLogsInstance.Show();
+            this.m_formLogsInstance.RefreshFinalizedResults();
         }
 
         private void buttonSettingsClick(object p_sender, EventArgs p_e)
@@ -116,6 +117,11 @@ namespace Stone_Application
             this.m_panelLoad.Controls.Clear();
             this.m_panelLoad.Controls.Add(this.m_formSettingsInstance);
             this.m_formSettingsInstance.Show();
+        }
+
+        public void RefreshLogs()
+        {
+            this.m_formLogsInstance?.RefreshFinalizedResults();
         }
 
         private void buttonExitClick(object p_sender, EventArgs p_e)

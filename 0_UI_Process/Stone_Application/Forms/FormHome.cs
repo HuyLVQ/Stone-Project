@@ -168,6 +168,7 @@ namespace Stone_Application.Forms
                         measuredWeight4 = checked((float)result.AverageWeights[3])
                     });
                 });
+                this.m_mainForm.RefreshLogs();
                 string aiWarning = aiSettled ? "" : "\n\nLive AI timed out and was terminated. It will be restarted before the next session.";
                 MessageBox.Show(this, FormatVideoInferenceResult(result) + aiWarning,
                     "Video inference result", MessageBoxButtons.OK,
