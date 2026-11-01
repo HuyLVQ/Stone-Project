@@ -36,11 +36,11 @@ Basler camera -> C# capture worker -> five-slot shared-memory ring
                                                  |
                                        live display + PostgreSQL
 
-STOP -> settle live request -> clear shared memory -> finalize AVI
-     -> offline Python analysis -> finalized PostgreSQL row -> Excel export
+STOP -> settle live request -> clear memory -> drain/finalize AVI segments
+     -> session manifest -> offline analysis -> quality-tagged row -> Excel
 ```
 
-Capture continues independently of periodic live inference. The worker selects the newest completed frame, protects its ring slot until completion, and permits one inference in flight. Live measurements support monitoring; finalized offline measurements supply exported session results.
+Capture continues independently of periodic live inference. The worker selects the newest completed frame, protects its ring slot until completion, and permits one inference in flight. A separate recording worker drains an eight-frame bounded queue into AVI segments with a JSON manifest. Live measurements support monitoring; finalized offline measurements and their completeness status supply exported session results.
 
 ## Prerequisites
 
@@ -109,9 +109,9 @@ The expected executable is `0_UI_Process/Stone_Application/bin/x64/Debug/Stone_A
 2. In Settings, connect the serial Modbus device and initialize the Basler camera, then initialize AI. The UI creates IPC resources, launches Python, warms up inference, and starts the workers.
 3. Press **Start**. The application begins a database session, opens an AVI recording, resets the ring, and streams camera frames.
 4. During streaming, live inference runs at an eligible interval and updates the display and database through observers.
-5. Press **Stop**. New capture/dispatch stops; an outstanding live result is consumed and discarded before shared memory is cleared. The AVI is finalized, then offline analysis runs synchronously.
+5. Press **Stop**. New capture/dispatch stops; an outstanding live result is settled independently of UI callbacks before memory is cleared. Accepted recording frames drain, AVI segments finalize, and offline analysis runs synchronously against the manifest. AI settlement has a 15-second wait plus confirmed process-exit recovery on timeout.
 6. On success, the offline aggregate is saved as the finalized session result and displayed. A new session remains unavailable while this analysis runs.
-7. Export session results through the application. Excel selects finalized rows; incomplete sessions have no fallback to live estimates.
+7. Export session results through the application. Excel selects finalized rows with explicit Complete/Partial/Unknown status and frame/loss counts. Partial usable results are retained; failed sessions have no fallback to live estimates.
 
 Counts are summed across readable video frames; four weight outputs are averaged across processed frames. This aggregation does not implement cross-frame object tracking. Its suitability depends on the physical capture process and the intended counting contract.
 
@@ -126,6 +126,7 @@ Counts are summed across readable video frames; four weight outputs are averaged
 | Result region | Absolute offset 34,560,064; 10,000,000 bytes reserved; result image at relative offset 100. |
 | Events | `cam_ui_wrote_event` and `cam_ai_wrote_event`. |
 | Video | Motion-JPEG AVI, nominal 30 FPS. |
+| Recording queue and rollover | Eight frames; AVI segments below 1,800,000,000 bytes, with a session JSON manifest. |
 | Recording location | `STONE_VIDEO_OUTPUT_PATH`, otherwise `<repository>/Recordings`. |
 | Runtime calibration/features | `1_AI_Process/utils/config.py`: `RATIO_SCALE = 1/18.82` and ordered 12-feature schema. |
 | Excel template | `PDF_Reference/Reference2.xlsx` normally, `Reference.xlsx` when `s_isDebugMode` is true. |
@@ -138,14 +139,14 @@ To choose a recording folder before launching the UI from the same environment:
 $env:STONE_VIDEO_OUTPUT_PATH = 'D:\StoneRecordings'
 ```
 
-Excel writes data from row 4: session ID in A, class percentages in B-E, and the first model weight in F. Debug mode also exports model weights 2-4 in G-I.
+Excel writes data from row 4: session ID in A, class percentages in B-E, and the first model weight in F. Debug mode also exports model weights 2-4 in G-I. Columns J-N contain analysis status, expected/processed/skipped frames, and recording losses.
 
 ## Offline utilities
 
-Re-analyze a finalized recording with the runtime pipeline:
+Re-analyze a finalized recording manifest with the runtime pipeline (a standalone AVI is also accepted, with Unknown completeness):
 
 ```powershell
-.\1_AI_Process\.venv\Scripts\python.exe .\1_AI_Process\src\video_inference.py 'D:\StoneRecordings\session_example.avi'
+.\1_AI_Process\.venv\Scripts\python.exe .\1_AI_Process\src\video_inference.py 'D:\StoneRecordings\session_example.json'
 ```
 
 The script emits a `VIDEO_RESULT|...` summary for the C# parser. Running it directly does not persist a finalized database row.
@@ -166,19 +167,18 @@ For runtime changes, verify a complete START/STOP session on the target hardware
 
 Known limitations visible in source:
 
-- STOP can wait indefinitely if an outstanding live AI request never completes.
+- STOP waits up to 15 seconds for AI; timed-out Python must exit before memory reuse. If exit cannot be confirmed, START remains unavailable.
 - Offline inference blocks the UI while it runs.
 - Live raw BGR frames and JPEG-decoded AVI frames can yield different model results.
 - Nominal AVI FPS does not preserve variable frame capture timing; JPEG encoding and disk throughput limit capture performance.
-- EOF and a failed frame read both end the offline OpenCV loop; a partially decodable video may produce a partial aggregate.
+- Offline analysis attempts bounded seek recovery past unreadable positions, skips failed frame inference, rejects zero processed frames, and explicitly labels usable partial results. Camera-internal dropped frames are outside manifest completeness accounting.
 - Model units, calibration, accuracy targets, and the repeated-object counting contract need project-owner confirmation.
 - The repository contains evaluation scripts, but no dedicated automated test suite was identified in the inspected source files.
 
 ## Additional notes
 
 - [Implementation notes](IMPLEMENTATION_NOTES.md)
-- [Session STOP behavior](SESSION_STOP_REMEDIATIONS.md)
 - [Finalized offline results and export](OFFLINE_RESULTS_AS_EXPORT_SOURCE.md)
-- [Historical review notes](REVIEW_LATEST_TWO_COMMITS.md)
+- [Session-video skill](.agents/skills/stone-session-video/SKILL.md)
 
 These notes provide change-specific context; inspect the current source when behavior and historical notes differ.

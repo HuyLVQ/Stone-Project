@@ -139,8 +139,11 @@ namespace Stone_Application
 
             this.m_cleanupStarted = true;
 
-            RunCleanupAction("video recording", () => Common.videoRecorder.StopSession());
+            lock (Common.s_lockState) Common.s_currentState = Common.currentState.READY;
+            RunCleanupAction("session dispatch", () => Stone_Application.IPC.IPCServices.getInstance().deactivateSession());
+            Common.videoRecorder.StopAccepting();
             RunCleanupAction("threads", Infrastructure.MultiThread.StopAll);
+            RunCleanupAction("video recording", () => Common.videoRecorder.StopSession());
             RunCleanupAction("application resources", FormSettings.CleanupAllResources);
             RunCleanupAction("measurement database", Common.ResetRepository);
             RunCleanupAction("Docker services", InitService.DisposeService.cleanupService);

@@ -79,6 +79,7 @@ public static class Common
 
             lock (s_lockSession)
             {
+                if (p_information.sessionId > 0) return;
                 p_information.sessionId = s_currentSessionId;
                 p_information.isStartOfSession = s_sessionEntryPending;
                 s_sessionEntryPending = false;

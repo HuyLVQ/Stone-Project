@@ -118,6 +118,7 @@ namespace Stone_Application.Forms
 
             s_instance.BeginInvoke(new Action(() =>
             {
+                if (s_instance.IsDisposed || !Stone_Application.IPC.IPCServices.getInstance().IsCurrentSession(p_information.liveSessionToken)) return;
                 if (s_instance.textBoxLogging.Text.Length == 0)
                 {
                     s_instance.m_buttonExportPDF.Enabled = true;

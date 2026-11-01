@@ -22,25 +22,25 @@ Resolve paths from the repository root, three parents above this skill directory
 
 ## Preserve the session contract
 
-START currently activates/reset IPC metadata, begins a PostgreSQL session, opens a new AVI, restarts the interval stopwatch, and enters `STREAMING`. Check failure handling across these actions: a failed start can leave partially initialized resources. Preserve the requested workflow while keeping session ID, recorder, and IPC activity aligned.
+START ensures live AI readiness, begins a PostgreSQL session, resets/activates IPC metadata with a new token, opens the recording worker, restarts the interval stopwatch, and enters `STREAMING`. Check failure cleanup across these actions. Preserve session ID, recorder token, and IPC activity alignment.
 
 STOP currently:
 
 1. Changes state to `READY` and deactivates the IPC session.
-2. Lets the pending live request finish; consumes/discards its response, then clears the mapping and ring metadata.
-3. Finalizes the AVI and releases its file handle.
-4. Runs offline inference synchronously with session controls unavailable.
+2. Closes recording acceptance, settles the pending live request independently of UI callbacks, and clears memory/events only after the old writer is settled. The 15-second inference timeout requires confirmed Python exit before reuse; failed requests have separate accounting.
+3. Drains accepted recording frames, finalizes AVI segments, releases handles, and writes the session JSON manifest. Recording finalization also runs if AI settlement fails.
+4. Runs offline analysis of the manifest synchronously with session controls unavailable.
 5. Persists the aggregate for the same session, then shows the result and restores START availability.
 
 Maintain exclusive session ownership while offline processing runs. If the requested work introduces asynchronous processing, carry an explicit immutable session identity and prevent a later session from receiving an earlier result. Inspect UI marshaling together with STOP waits to avoid worker/UI deadlocks.
 
 ## Recorder details
 
-`VideoRecorder` writes `session_yyyyMMdd_HHmmss_fff.avi` under `STONE_VIDEO_OUTPUT_PATH`, falling back to `<repository>/Recordings`. Each acquired frame is offered to recording independently of live inference cadence. Inspect the camera call site when changing frame delivery.
+`VideoRecorder` writes session AVI segments and a JSON manifest under `STONE_VIDEO_OUTPUT_PATH`, falling back to `<repository>/Recordings`. Capture uses a session token obtained before camera retrieval and offers an owned immutable frame buffer to an eight-frame bounded queue. A dedicated worker encodes/writes frames; overflow is counted. Inspect rejection and STOP acceptance boundaries when changing frame delivery.
 
 The writer encodes BGR frames as JPEG, writes padded `00dc` chunks, and on STOP appends `idx1` and patches RIFF/list sizes and frame counts. Finalize and close before opening a video for inference. Keep repeated STOP/disposal behavior consistent with `LastCompletedPath` and prevent an older path from being attributed to a new failed session.
 
-Nominal playback is 30 FPS without per-frame timestamps. Encoding/disk work runs on the capture path. The writer retains its index in memory and patches sizes using checked signed 32-bit conversions; long/large recordings need explicit format-limit analysis rather than a claim of unlimited recording support.
+Nominal playback is 30 FPS without per-frame timestamps. Segments roll over before 1,800,000,000 bytes, reserving index space below signed 32-bit size limits. Encoder failures skip one frame. Partial writes truncate back to the chunk start; a failed rollback/finalization faults the recording. Keep cleanup in failure paths and publish completed paths only after success.
 
 ## Offline results and authority
 
@@ -49,14 +49,14 @@ The offline entry point uses the same `YOLOImpl` as live inference, resizes deco
 The stdout contract is one summary line with this shape:
 
 ```text
-VIDEO_RESULT|frames=2|MiSang=1|1x2=2|2x4=3|4x6=4|weight1=1.0|weight2=2.0|weight3=3.0|weight4=4.0
+VIDEO_RESULT|frames=2|expected=2|skipped=0|dropped=0|complete=1|known=1|MiSang=1|1x2=2|2x4=3|4x6=4|weight1=1.0|weight2=2.0|weight3=3.0|weight4=4.0
 ```
 
-C# selects the last matching line and parses invariant-culture numbers. Preserve producer/parser agreement and concurrent draining of stdout/stderr to avoid subprocess pipe deadlocks. A direct CLI run prints results but does not write the finalized database row.
+C# selects the last matching line and parses invariant-culture numbers. The current summary also requires `expected`, `skipped`, `dropped`, `complete`, and `known` quality fields. Preserve producer/parser agreement, finite-number/accounting validation, and concurrent stdout/stderr draining. A direct CLI run does not write the finalized database row.
 
-`Common.PersistFinalSessionResult()` calls `SaveFinalSessionResult()`, which replaces the finalized row for that session within a transaction. Excel obtains rows marked `isFinalizedResult = TRUE`; live telemetry must not silently become the fallback when offline analysis or persistence fails.
+`Common.PersistFinalSessionResult()` calls `SaveFinalSessionResult()`, which replaces the finalized row for that session within a transaction. Partial usable results persist under the skip-and-continue policy, with Complete/Partial/Unknown status and frame/loss counts. Excel selects finalized rows and exposes quality fields in J-N. Live telemetry must not become a fallback for failed offline processing.
 
-The offline loop currently treats a failed read like EOF and emits zero-frame summaries for an opened video with no decoded frames. Neither behavior guarantees a complete valid recording. When improving failure handling, address these cases explicitly and distinguish inference failure from persistence failure in user feedback.
+The manifest supplies expected frames per segment and capture/queue/encoding losses. Offline analysis seeks past failed positions with a configurable limit of 30 consecutive failures, continues with later segments, skips per-frame inference errors, and rejects zero processed frames. Standalone AVI completeness remains Unknown. A Complete manifest analysis does not establish that the camera itself skipped no frames; retain that distinction in status wording.
 
 `Weight_v2/test.py` uses a different YOLO checkpoint, sampling interval, and calibration. Do not substitute it for STOP inference on the assumption that the results are equivalent.
 

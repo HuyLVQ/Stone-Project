@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.MemoryMappedFiles;
@@ -15,18 +16,77 @@ namespace Stone_Application.IPC
     {
         private static IPCServices s_instance;
         private readonly object m_ringLock = new object();
+        private readonly object m_publishLock = new object();
         private int m_nextSlot;
         private int m_latestSlot = -1;
         private int m_inferenceSlot = -1;
         private bool m_sessionActive;
+        private long m_sessionToken;
+        private long m_sent, m_received, m_failed;
+        private readonly Func<bool> m_isAiReady;
+        private readonly Action m_stopAi;
+        private readonly int m_stopTimeout;
+        public long SessionToken { get { lock (m_ringLock) return m_sessionActive ? m_sessionToken : 0; } }
+        public long SentCount { get { lock (m_ringLock) return m_sent; } }
+        public long ReceivedCount { get { lock (m_ringLock) return m_received; } }
+        public long FailedCount { get { lock (m_ringLock) return m_failed; } }
+        public bool IsCurrentSession(long token) { lock (m_ringLock) return m_sessionActive && token == m_sessionToken; }
         private readonly ManualResetEventSlim m_noInferenceInFlight = new ManualResetEventSlim(true);
+        private readonly BlockingCollection<CaptureFrame> m_captureQueue = new BlockingCollection<CaptureFrame>(2);
 
-        private IPCServices()
+        private IPCServices() : this("", () => AIHelper.IsLiveReady && Common.pythonProcess != null && !Common.pythonProcess.HasExited,
+            StopLiveAi, Config.AI_STOP_TIMEOUT_MS) { }
+
+        // Injectable dependencies and resource suffix isolate the hardware-free protocol harness.
+        private IPCServices(string suffix, Func<bool> isAiReady, Action stopAi, int stopTimeout)
         {
-            Common.ui2aiEvent = new EventWaitHandle(false, EventResetMode.AutoReset, Config.UI_2_AI_EVENT_TAGNAME);
-            Common.ai2uiEvent = new EventWaitHandle(false, EventResetMode.AutoReset, Config.AI_2_UI_EVENT_TAGNAME);
+            m_isAiReady = isAiReady; m_stopAi = stopAi; m_stopTimeout = stopTimeout;
+            Common.ui2aiEvent = new EventWaitHandle(false, EventResetMode.AutoReset, Config.UI_2_AI_EVENT_TAGNAME + suffix);
+            Common.ai2uiEvent = new EventWaitHandle(false, EventResetMode.AutoReset, Config.AI_2_UI_EVENT_TAGNAME + suffix);
 
-            Common.mmf = MemoryMappedFile.CreateOrOpen(Config.MMF_TAGNAME, Config.MAP_SIZE);
+            Common.mmf = MemoryMappedFile.CreateOrOpen(Config.MMF_TAGNAME + suffix, Config.MAP_SIZE);
+            Task.Run((Action)CapturePublishLoop);
+        }
+
+        private sealed class CaptureFrame
+        {
+            public byte[] Image;
+            public long SessionToken;
+        }
+
+        // Keep capture independent of the memory-mapped write. A single bounded
+        // worker publishes frames in order and drops the oldest pending frame if
+        // publication falls behind, so memory use stays bounded.
+        public bool QueueCaptureFrame(byte[] image, long sessionToken)
+        {
+            if (image == null || image.Length != Config.IMAGE_BYTE_COUNT)
+                throw new ArgumentException("Camera frame size does not match the configured image dimensions.", nameof(image));
+            if (!IsCurrentSession(sessionToken)) return false;
+            var frame = new CaptureFrame { Image = image, SessionToken = sessionToken };
+            if (m_captureQueue.TryAdd(frame)) return true;
+            CaptureFrame discarded;
+            m_captureQueue.TryTake(out discarded);
+            return m_captureQueue.TryAdd(frame);
+        }
+
+        private void CapturePublishLoop()
+        {
+            foreach (CaptureFrame frame in m_captureQueue.GetConsumingEnumerable())
+            {
+                try { captureFrame(frame.Image, frame.SessionToken); }
+                catch (Exception ex) { Console.WriteLine("[ERROR] [IPC] Frame publication failed: " + ex.Message); }
+            }
+        }
+
+        private static void StopLiveAi()
+        {
+            var process = Common.pythonProcess;
+            if (process != null && !process.HasExited)
+            {
+                process.Kill();
+                if (!process.WaitForExit(Config.AI_EXIT_TIMEOUT_MS))
+                    throw new TimeoutException("AI did not exit; shared memory was retained and START remains unavailable.");
+            }
         }
 
         static public void IPCCleanUp()
@@ -83,30 +143,54 @@ namespace Stone_Application.IPC
                 if (m_inferenceSlot >= 0)
                     throw new InvalidOperationException("Cannot begin a session while an inference is in flight.");
 
-                m_nextSlot = 0;
-                m_latestSlot = -1;
+                if (!m_isAiReady())
+                    throw new InvalidOperationException("Live AI must be initialized before START.");
+                m_nextSlot = 0; m_latestSlot = -1;
+                m_sessionToken++;
+                m_sent = m_received = m_failed = 0;
                 m_sessionActive = true;
             }
         }
 
         // STOP first prevents new frames/dispatches, then waits for the already
         // dispatched request to finish before it erases either shared-memory region.
-        public void endSessionAndClear()
+        public void deactivateSession()
         {
-            lock (m_ringLock)
+            lock (m_publishLock) lock (m_ringLock) m_sessionActive = false;
+        }
+
+        public void PublishIfCurrent(long token, Action publish)
+        {
+            // STOP serializes with persistence, while no UI callback is synchronously awaited.
+            lock (m_publishLock) if (IsCurrentSession(token)) publish();
+        }
+
+        // Returns false when a pending request had to be failed by stopping Python.
+        // Never erase memory until the previous writer has demonstrably exited.
+        public bool endSessionAndClear()
+        {
+            deactivateSession();
+            bool settled = m_noInferenceInFlight.Wait(m_stopTimeout);
+            if (!settled)
             {
-                m_sessionActive = false;
+                AIHelper.MarkUnavailable();
+                m_stopAi();
+                lock (m_ringLock)
+                {
+                    m_failed += m_sent - m_received - m_failed;
+                    m_inferenceSlot = -1;
+                    m_noInferenceInFlight.Set();
+                }
             }
-
-            m_noInferenceInFlight.Wait();
-
             lock (m_ringLock)
             {
+                if (m_sent != m_received + m_failed)
+                    throw new InvalidOperationException("Inference completion accounting is inconsistent.");
                 clearSharedMemory();
-                m_nextSlot = 0;
-                m_latestSlot = -1;
-                m_inferenceSlot = -1;
+                m_nextSlot = 0; m_latestSlot = -1; m_inferenceSlot = -1;
+                Common.ui2aiEvent.Reset(); Common.ai2uiEvent.Reset();
             }
+            return settled && m_failed == 0;
         }
 
         public bool isSessionActive()
@@ -115,14 +199,14 @@ namespace Stone_Application.IPC
                 return m_sessionActive;
         }
 
-        public bool captureFrame(byte[] p_image)
+        public bool captureFrame(byte[] p_image, long sessionToken)
         {
             if (p_image == null || p_image.Length != Config.IMAGE_BYTE_COUNT)
                 throw new ArgumentException("Camera frame size does not match the configured image dimensions.", nameof(p_image));
 
             lock (m_ringLock)
             {
-                if (!m_sessionActive)
+                if (!m_sessionActive || sessionToken != m_sessionToken)
                     return false;
 
                 // Do not overwrite the slot the AI process is currently reading.
@@ -148,26 +232,47 @@ namespace Stone_Application.IPC
             }
         }
 
-        public bool tryAcquireLatestFrame(out int p_slot)
+        public bool TryDispatch(out int slot, out long sessionToken)
         {
             lock (m_ringLock)
             {
-                p_slot = m_latestSlot;
-                if (!m_sessionActive || p_slot < 0 || m_inferenceSlot >= 0)
-                    return false;
-
-                m_inferenceSlot = p_slot;
+                slot = m_latestSlot; sessionToken = m_sessionToken;
+                if (!m_sessionActive || slot < 0 || m_inferenceSlot >= 0) return false;
+                // Publish the request and account for it atomically with STOP gating.
+                writeTask(slot);
+                m_inferenceSlot = slot;
                 m_noInferenceInFlight.Reset();
+                m_sent++;
+                try { Common.ui2aiEvent.Set(); }
+                catch { m_sent--; m_inferenceSlot = -1; m_noInferenceInFlight.Set(); throw; }
                 return true;
             }
         }
 
-        public void releaseInferenceFrame(int p_slot)
+        public bool HasPendingRequest(long token)
+        {
+            lock (m_ringLock) return token == m_sessionToken && m_inferenceSlot >= 0;
+        }
+
+        public bool CompleteInference(int slot, long token, out IInformation information, out IImage image)
         {
             lock (m_ringLock)
             {
-                if (m_inferenceSlot == p_slot)
+                information = null; image = null;
+                if (token != m_sessionToken || slot != m_inferenceSlot) return false;
+                if (!Common.ai2uiEvent.WaitOne(0)) return false;
+                try
                 {
+                    (information, image) = readTask();
+                    information.liveSessionToken = image.liveSessionToken = token;
+                    Common.PrepareInformationForPersistence(information);
+                    m_received++;
+                    return true;
+                }
+                catch { m_failed++; throw; }
+                finally
+                {
+                    // Completion does not depend on a PictureBox callback or a DB observer.
                     m_inferenceSlot = -1;
                     m_noInferenceInFlight.Set();
                 }

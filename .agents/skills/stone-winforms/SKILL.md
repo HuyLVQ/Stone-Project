@@ -24,8 +24,8 @@ Paths after the first entry are relative to `0_UI_Process/Stone_Application/`.
 1. Trace the control event through state changes, worker actions, and observers before editing. `MainForm` retains Home, Settings, and Logs instances and embeds them in a panel; navigation does not construct a new session.
 2. Inspect the associated `.Designer.cs` and `.resx` when changing layout, control names, or event wiring. Preserve designer compatibility. This is a .NET Framework 4.7.2 project using C# 7.3 in x64 configurations; new source files need explicit project inclusion in the existing non-SDK `.csproj`.
 3. Keep control updates on the UI thread. Review `Invoke`/`BeginInvoke`, form disposal, and synchronous waits together: a worker synchronously invoking the UI can deadlock when the UI waits for that worker during STOP or shutdown. Avoid adding synchronous UI callbacks while holding shared state or ring locks.
-4. Preserve result routing through `AIProcessEvent` and its observers. `notifyInformation()` stamps the session through `Common.PrepareInformationForPersistence()` before notification; bypassing this can attach measurements to the wrong session.
-5. For image updates, track ownership of the observer-created bitmap, the clone stored in the PictureBox, and the previous displayed image. Dispose objects at the end of their actual ownership; do not dispose an image before a queued UI update uses it.
+4. Preserve result routing through `AIProcessEvent` and its observers. `IPCServices.CompleteInference()` stamps immutable session identity before releasing the slot. Do not restamp delayed results against the current session or consume the first-measurement flag twice. Persistence must serialize with STOP without depending on UI callbacks.
+5. `FormHome.updatePictureBox()` takes ownership of the observer-created bitmap, posts an asynchronous callback, rejects obsolete session tokens, and disposes the previous displayed image. Preserve ownership on rejected/failed callbacks; do not dispose an image before a queued UI update uses it.
 
 ## State and lifecycle details
 

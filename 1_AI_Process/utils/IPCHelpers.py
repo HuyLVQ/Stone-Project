@@ -52,7 +52,8 @@ class IPCHelper():
     
     def taskWrite(self) -> np.ndarray:
         try:
-            win32event.WaitForSingleObject(self.m_UI2AIEvent, MMF_TIMEOUT)
+            while win32event.WaitForSingleObject(self.m_UI2AIEvent, MMF_TIMEOUT) != win32event.WAIT_OBJECT_0:
+                pass
             
             self.m_hmap.seek(WRITE_OFFSET)
             slot = struct.unpack('<i', self.m_hmap.read(4))[0]

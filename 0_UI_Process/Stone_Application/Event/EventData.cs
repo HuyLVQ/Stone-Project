@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,6 +8,12 @@ namespace Stone_Application.Event
 {
     public class IInformation
     {
+        public long liveSessionToken { get; set; }
+        public string analysisStatus { get; set; } = "Unknown";
+        public long expectedFrames { get; set; }
+        public long processedFrames { get; set; }
+        public long skippedFrames { get; set; }
+        public long droppedFrames { get; set; }
         public Int64 countMiSang { get; set; }
         public Int64 count1x2 { get; set; }
         public Int64 count2x4 { get; set; }
@@ -44,6 +50,7 @@ namespace Stone_Application.Event
 
     public class IImage
     {
+        public long liveSessionToken { get; set; }
         public byte[] recvImage { get; set; }
     }
 }

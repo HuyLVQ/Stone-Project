@@ -24,7 +24,24 @@ public static class Config
     public const int SENSOR_ADDR = 0;
 
     private static readonly string s_baseDir = AppDomain.CurrentDomain.BaseDirectory;
-    public static readonly string s_rootPath = Path.GetFullPath(Path.Combine(s_baseDir, "..", "..", "..", "..", ".."));
+    public static readonly string s_rootPath = FindRepositoryRoot(s_baseDir);
+
+    private static string FindRepositoryRoot(string startDirectory)
+    {
+        DirectoryInfo directory = new DirectoryInfo(startDirectory);
+        while (directory != null)
+        {
+            if (Directory.Exists(Path.Combine(directory.FullName, "1_AI_Process")) &&
+                Directory.Exists(Path.Combine(directory.FullName, "0_UI_Process", "Stone_Application")))
+                return directory.FullName;
+
+            directory = directory.Parent;
+        }
+
+        // Preserve the conventional development layout in the error paths below,
+        // where the missing repository files can be reported explicitly.
+        return Path.GetFullPath(Path.Combine(startDirectory, "..", "..", "..", "..", ".."));
+    }
 
     public static readonly string s_pythonEnvPath = Path.Combine(s_rootPath, "1_AI_Process", ".venv", "Scripts", "python.exe");
     public static readonly string s_pythonScriptPath = Path.Combine(s_rootPath, "1_AI_Process", "src", "main.py");
@@ -50,6 +67,13 @@ public static class Config
     public const int OFFSET_IMAGE = 100;
 
     public const int VIDEO_FRAME_RATE = 30;
+    public const long VIDEO_SEGMENT_MAX_BYTES = 1_800_000_000;
+    public const int VIDEO_QUEUE_CAPACITY = 8; // About 53 MiB of queued raw frames.
+    public const int AI_STOP_TIMEOUT_MS = 15_000;
+    public const int AI_EXIT_TIMEOUT_MS = 5_000;
+    public const int AI_WARMUP_TIMEOUT_MS = 60_000;
+    public const int AI_WARMUP_ITERATIONS = 20;
+    public const int VIDEO_DECODE_RECOVERY_LIMIT = 30;
     public static readonly string s_videoOutputPath =
         Environment.GetEnvironmentVariable("STONE_VIDEO_OUTPUT_PATH") ??
         Path.Combine(s_rootPath, "Recordings");

@@ -77,7 +77,12 @@ namespace Stone_Application.Repository
                         " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight1 REAL NOT NULL DEFAULT 0;" +
                         " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight2 REAL NOT NULL DEFAULT 0;" +
                         " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight3 REAL NOT NULL DEFAULT 0;" +
-                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight4 REAL NOT NULL DEFAULT 0;", conn))
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight4 REAL NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS analysis_status TEXT NOT NULL DEFAULT 'Unknown';" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS expected_frames BIGINT NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS processed_frames BIGINT NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS skipped_frames BIGINT NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS dropped_frames BIGINT NOT NULL DEFAULT 0;", conn))
                     {
                         migrationCmd.ExecuteNonQuery();
                     }
@@ -211,8 +216,8 @@ namespace Stone_Application.Repository
 
                         using (var insertCmd = new NpgsqlCommand(
                             "INSERT INTO " + m_TABLE_NAME +
-                            " (countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4, isStartOfSession, isFinalizedResult, sessionId, recorded_at)" +
-                            " VALUES (@miSang, @p1x2, @p2x4, @p4x6, @weight1, @weight2, @weight3, @weight4, FALSE, TRUE, @sessionId, NOW());", conn, transaction))
+                            " (countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4, isStartOfSession, isFinalizedResult, sessionId, recorded_at, analysis_status, expected_frames, processed_frames, skipped_frames, dropped_frames)" +
+                            " VALUES (@miSang, @p1x2, @p2x4, @p4x6, @weight1, @weight2, @weight3, @weight4, FALSE, TRUE, @sessionId, NOW(), @status, @expected, @processed, @skipped, @dropped);", conn, transaction))
                         {
                             insertCmd.Parameters.AddWithValue("miSang", p_entity.countMiSang);
                             insertCmd.Parameters.AddWithValue("p1x2", p_entity.count1x2);
@@ -223,6 +228,11 @@ namespace Stone_Application.Repository
                             insertCmd.Parameters.AddWithValue("weight3", p_entity.measuredWeight3);
                             insertCmd.Parameters.AddWithValue("weight4", p_entity.measuredWeight4);
                             insertCmd.Parameters.AddWithValue("sessionId", p_entity.sessionId);
+                            insertCmd.Parameters.AddWithValue("status", p_entity.analysisStatus);
+                            insertCmd.Parameters.AddWithValue("expected", p_entity.expectedFrames);
+                            insertCmd.Parameters.AddWithValue("processed", p_entity.processedFrames);
+                            insertCmd.Parameters.AddWithValue("skipped", p_entity.skippedFrames);
+                            insertCmd.Parameters.AddWithValue("dropped", p_entity.droppedFrames);
                             insertCmd.ExecuteNonQuery();
                         }
 
@@ -339,7 +349,7 @@ namespace Stone_Application.Repository
             // Excel is sourced only from the finalized offline-video aggregate,
             // never from the live inference snapshots recorded during a session.
             string sql =
-                    "SELECT DISTINCT ON (sessionId) sessionId, countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4" +
+                    "SELECT DISTINCT ON (sessionId) sessionId, countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4, analysis_status, expected_frames, processed_frames, skipped_frames, dropped_frames" +
                     " FROM " + m_TABLE_NAME +
                     " WHERE isFinalizedResult = TRUE" +
                     " ORDER BY sessionId, recorded_at DESC;";
@@ -363,7 +373,12 @@ namespace Stone_Application.Repository
                             measuredWeight1 = reader.GetFloat(5),
                             measuredWeight2 = Config.s_isDebugMode ? reader.GetFloat(6) : 0.0f,
                             measuredWeight3 = Config.s_isDebugMode ? reader.GetFloat(7) : 0.0f,
-                            measuredWeight4 = Config.s_isDebugMode ? reader.GetFloat(8) : 0.0f
+                            measuredWeight4 = Config.s_isDebugMode ? reader.GetFloat(8) : 0.0f,
+                            analysisStatus = reader.GetString(9),
+                            expectedFrames = reader.GetInt64(10),
+                            processedFrames = reader.GetInt64(11),
+                            skippedFrames = reader.GetInt64(12),
+                            droppedFrames = reader.GetInt64(13)
                         });
                     }
                 }

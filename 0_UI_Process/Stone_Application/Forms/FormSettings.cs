@@ -94,9 +94,9 @@ namespace Stone_Application.Forms
 
         private void buttonCameraClick(object p_sender, EventArgs p_e)
         {
-            Common.camera = BaslerCamera.getInstance();
-            if (Common.camera != null)
+            try
             {
+                Common.camera = BaslerCamera.getInstance();
                 MessageBox.Show(this, "Camera successfully initialized", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 this.m_buttonCamera.Enabled = false;
                 this.m_buttonCamera.ForeColor = System.Drawing.SystemColors.ButtonShadow;
@@ -106,29 +106,40 @@ namespace Stone_Application.Forms
                     this.m_buttonAI.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
                 }
             }
+            catch (Exception ex)
+            {
+                Common.camera = null;
+                MessageBox.Show(this,
+                    "Could not initialize the Basler camera. Check the camera connection, power, and Pylon driver, then try again.\n\n" + ex.GetBaseException().Message,
+                    "Camera initialization error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
-        private void buttonAIClick(object p_sender, EventArgs p_e)
+        private async void buttonAIClick(object p_sender, EventArgs p_e)
         {
-            // Implement AI click event
-            AIHelper.initializeAI();
-            AIHelper.warmUpAI();
-
-            FormHome.disableStreaming();
-
-            this.Invoke((Action)(() =>
+            this.m_buttonAI.Enabled = false;
+            try
             {
+                await Task.Run(() =>
+                {
+                    AIHelper.initializeAI();
+                    AIHelper.warmUpAI();
+                });
+                FormHome.disableStreaming();
                 MessageBox.Show(this, "AI initialized sucessfully.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                this.m_buttonAI.Enabled = false;
                 this.m_buttonAI.ForeColor = System.Drawing.SystemColors.ButtonShadow;
-            }));
-
-            Common.s_stopWatchMain.Start();
-
-
-            MultiThread.thread1Work();
-            MultiThread.thread2Work();
-
+                Common.s_stopWatchMain.Start();
+                MultiThread.thread1Work();
+                MultiThread.thread2Work();
+            }
+            catch (Exception ex)
+            {
+                FormHome.requireAiInitialization();
+                this.m_buttonAI.Enabled = true;
+                this.m_buttonAI.ForeColor = System.Drawing.SystemColors.ControlText;
+                MessageBox.Show(this, "AI initialization failed. Correct the problem and retry.\n\n" + ex.Message,
+                    "AI initialization error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 }

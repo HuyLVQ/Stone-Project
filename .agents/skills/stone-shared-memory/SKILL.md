@@ -44,14 +44,16 @@ Class ordering derives from `TYPE_COLORS` insertion order in Python. The current
 
 1. Capture writes a complete frame under the ring lock, then publishes the newest slot. It skips the slot protected for inference; older unprotected frames may be overwritten.
 2. At an eligible interval, acquire the newest completed slot, mark inference in flight, write its index, and signal UI-to-AI. The protocol supports one outstanding request, not a queued job per captured frame.
-3. Python waits, reads the selected slot, writes the result, and signals AI-to-UI. C# consumes completion, reads the result, delivers it only while the session is active, and releases the slot.
-4. STOP disables new dispatch and waits for outstanding inference before zeroing the entire mapping. A late result must be consumed without updating the completed session.
+3. Python waits, reads the selected slot, writes the result, and signals AI-to-UI. C# consumes the event under the ring lock, reads and stamps the result, updates completion accounting, and releases the slot before observer notification. UI callbacks are asynchronous and validate the session token when they execute.
+4. STOP disables new dispatch and waits for outstanding inference before zeroing the mapping. Sent, received, and failed counters must settle as `sent == received + failed`. A late result must be consumed without updating the completed session.
 
 Review all exception and cancellation exits between acquisition and release. A missing release can block STOP; releasing before Python finishes can allow overwrite or clearing during inference. A timeout requires proving the old writer has stopped before reuse or reset, not merely abandoning the wait.
 
 Warm-up writes slot zero directly and consumes completion before normal workers run. Check it whenever geometry, offsets, event names, or startup sequencing change. `Config.s_rootPath` depends on executable output depth, so verify launch paths when diagnosing a worker that never connects.
 
-Known limitations to account for when relevant: STOP has no bounded inference wait; Python currently does not inspect the wait return code before reading; write exceptions can still be followed by a completion signal. Do not interpret a completion event alone as proof of a valid fresh payload.
+The normal STOP wait is bounded by `AI_STOP_TIMEOUT_MS` (15 seconds). On timeout, Python must exit within `AI_EXIT_TIMEOUT_MS` (5 seconds) before the outstanding request is marked failed and memory/events reset. If exit cannot be confirmed, retain memory and prevent START. Inspect warm-up readiness and old worker event consumption when changing restart logic.
+
+Python now checks the wait return code before reading. Result-write exceptions can still be followed by completion without an explicit wire-level error status. Do not interpret an event alone as proof of a valid payload when extending failure handling.
 
 ## Validate the change
 

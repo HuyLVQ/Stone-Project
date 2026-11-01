@@ -10,13 +10,13 @@ Basler camera
     v
 .NET WinForms UI ------------------------------------------------------+
   capture worker -> shared-memory image ring -> Python live AI         |
-  video recorder -> session AVI                                        |
+  recording queue -> recorder worker -> session AVI segments           |
   result worker  <- shared-memory result block <- completion event     |
     |                                                                   |
     +--> database persistence                                           |
     +--> result image/count/weight UI display                           |
                                                                         |
-STOP -> finalize AVI -> Python offline video AI -> result MessageBox --+
+STOP -> drain/finalize -> session manifest -> offline AI -> summary ---+
 ```
 
 | Component | Location | Responsibility |
@@ -42,7 +42,7 @@ While the session state is `STREAMING`:
 
 1. The camera worker retrieves the latest Basler BGR frame.
 2. The frame is copied into one of five shared-memory image slots.
-3. The same acquired frame is appended to the active Motion-JPEG AVI recording.
+3. The acquired frame is offered to an eight-frame recording queue using its session token. A dedicated worker encodes JPEG and writes AVI chunks; queue overflow is counted rather than blocking capture.
 4. If the ring has no unused historical slot, the oldest non-protected slot is overwritten. The slot currently being inferred is never overwritten.
 
 The implementation uses `GrabStrategy.LatestImages`; therefore, capture performance must be validated against the camera rate, JPEG encoding rate, and disk throughput.
@@ -56,8 +56,8 @@ At each `TIME_INTERVAL` (currently 880 ms):
 3. The UI signals the `cam_ui_wrote_event` named event.
 4. The Python live AI process reads that selected slot, runs the existing YOLO and weight pipeline, and writes counts, weights, and result image data to the result region.
 5. Python signals `cam_ai_wrote_event`.
-6. The UI result worker reads the result block, persists information through the existing observer/repository path, and displays the annotated image and values.
-7. The protected image slot is released.
+6. The result worker consumes the completion, reads the result, updates received-request accounting, and releases the protected slot before observer notification.
+7. Observers persist live telemetry and post asynchronous UI updates. Session-token checks discard obsolete UI callbacks.
 
 Only one live inference is in flight. If model execution takes longer than `TIME_INTERVAL`, the next eligible inference uses the newest available frame instead of building an unbounded backlog.
 
@@ -82,12 +82,12 @@ Named events:
 Pressing **Stop** follows this sequence:
 
 1. Session state changes to `READY`, preventing new camera frames and periodic live-inference dispatches.
-2. If a live request was already sent, the UI waits for it to finish, consumes its event, and discards its result so it cannot update the finished session.
-3. The complete shared-memory mapping is overwritten with zeroes; ring metadata is reset.
-4. The current AVI is finalized and its file handle is released.
-5. The UI synchronously launches `1_AI_Process/src/video_inference.py`.
-6. The offline process opens the finalized AVI, infers every readable frame with the same `YOLOImpl` and weight functions used by live inference, then emits one structured summary.
-7. The UI displays the summary in a MessageBox: processed frame count, accumulated class counts, and average per-frame weight-model results.
+2. Recording acceptance closes and already queued frames drain to the recorder. Old-session frames cannot enter a new recording.
+3. Sent and received live-request counters settle independently of UI callbacks. The normal AI wait is bounded at 15 seconds; on timeout, the old AI process must exit before memory is cleared. A failed request is tracked separately from a received result.
+4. Shared memory and events reset only after the outstanding writer is settled. AVI segments are finalized and their handles released; a JSON manifest records segment paths, frame counts, and recording losses.
+5. The UI synchronously launches `1_AI_Process/src/video_inference.py` against that manifest.
+6. Offline analysis combines all segments using the same `YOLOImpl` and weight functions as live inference. It attempts bounded recovery past unreadable frames and skips failed frame inference. Counts are summed and weights averaged over successfully processed frames.
+7. The summary includes expected/processed/skipped frames, recording losses, and a Complete/Partial/Unknown status. Zero processed frames produce an error instead of a finalized zero result.
 
 The UI intentionally remains unavailable for a new session while offline inference runs. This makes the recorded video the session's final source of truth.
 
@@ -101,7 +101,9 @@ Python result block -> UI result worker -> AIProcessEvent observers
                                       -> image/UI observers
 ```
 
-Offline video results are persisted as the authoritative finalized record for the session. Excel export selects only these finalized records, not the live per-frame snapshots collected during streaming.
+Offline video results are persisted as the finalized record for the session. Usable partial aggregates remain available with explicit quality metadata. Excel selects finalized records rather than live snapshots and writes status, expected frames, processed frames, skipped frames, and recording losses to columns J-N. Historical rows without quality metadata remain Unknown.
+
+AVI files roll over before reaching 1,800,000,000 bytes, with space reserved for the final index. All segments share one session manifest. Encoding failures skip the affected frame; failed chunk writes truncate back to the last complete chunk before continuing. A failed rollback or finalization faults the recording instead of publishing a completed path.
 
 ## Configuration
 
@@ -114,6 +116,10 @@ Key configuration is in `0_UI_Process/Stone_Application/Common/Config.cs`.
 | Ring capacity | 5 frames |
 | Video format | Motion-JPEG AVI |
 | Nominal video frame rate | 30 FPS (`VIDEO_FRAME_RATE`) |
+| Recording queue | 8 raw frames, about 53 MiB (`VIDEO_QUEUE_CAPACITY`) |
+| AVI segment limit | 1,800,000,000 bytes (`VIDEO_SEGMENT_MAX_BYTES`) |
+| AI STOP wait / process exit wait | 15,000 ms / 5,000 ms |
+| Decode recovery | Up to 30 consecutive failed positions per segment |
 | Video folder | `STONE_VIDEO_OUTPUT_PATH` environment variable, otherwise `<repository>\Recordings` |
 | Python executable | `1_AI_Process\.venv\Scripts\python.exe` |
 | Live AI entry point | `1_AI_Process\src\main.py` |
@@ -136,15 +142,23 @@ dotnet msbuild 0_UI_Process\Stone_Application\Stone_Application.sln /t:Build /p:
 
 The Python environment must include the dependencies required by YOLO, OpenCV, Torch, Pandas, and the regression models.
 
+## Focused video checks
+
+From the repository root, run `.\tests\run_video_checks.ps1` in PowerShell. The runner builds Debug/x64, compiles a standalone C# harness, runs Python video tests, and syntax-checks changed Python entry points. It currently locates Roslyn under Visual Studio 2022 Community; adjust that path for another installation.
+
+The checks use synthetic videos, injected file failures, and isolated IPC names. They do not launch the application, connect hardware, or start/reset PostgreSQL. Camera throughput, real AI termination, and database migration still need target-environment validation.
+
 ## Important operational notes
 
 - STOP waits for an already-dispatched live request before clearing shared memory. This prevents Python from reading/writing memory while the UI erases it.
-- If the live AI process never responds, STOP can wait indefinitely. A controlled timeout/AI-process restart is a recommended future hardening step.
+- If a live request times out, Python is stopped and its exit confirmed before memory reuse. The next START reinitializes and warms up AI; if exit cannot be confirmed, START remains unavailable.
 - Offline inference reads JPEG-decoded AVI frames, whereas live inference reads raw camera BGR frames. The two paths use the same model pipeline but can produce slightly different detections because of video compression/decoding.
 - AVI uses a fixed nominal 30 FPS. If actual capture timing varies, playback timing is approximate rather than timestamp-accurate.
+- Queue and observed capture/encoding losses are reported; frames skipped internally by the camera's `LatestImages` strategy are not proven absent by a Complete analysis status.
+- Standalone AVI analysis without a recorder manifest has Unknown completeness. Preserve the manifest with its segments for repeatable session analysis.
 
 ## Related implementation notes
 
-- [Session STOP remediation](SESSION_STOP_REMEDIATIONS.md)
 - [Implementation notes](IMPLEMENTATION_NOTES.md)
-- [Consolidated review of the latest two commits](REVIEW_LATEST_TWO_COMMITS.md)
+- [Offline results and export quality](OFFLINE_RESULTS_AS_EXPORT_SOURCE.md)
+- [Session-video skill](.agents/skills/stone-session-video/SKILL.md)

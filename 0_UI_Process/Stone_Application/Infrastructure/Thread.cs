@@ -39,17 +39,9 @@ namespace Stone_Application.Infrastructure
                     {
                         try
                         {
-                            lock (Common.s_lockState)
-                            {
-                                if (Common.s_currentState != Common.currentState.STREAMING)
-                                {
-                                    if (Config.s_isDebugMode == true) {
-                                        Console.WriteLine("[INFO] [THREAD #1] Not in streamin mode, go to sleep...");
-                                    }
-                                    Thread.Sleep(100);
-                                    continue;
-                                }
-                            }
+                            bool streaming;
+                            lock (Common.s_lockState) streaming = Common.s_currentState == Common.currentState.STREAMING;
+                            if (!streaming) { if (token.WaitHandle.WaitOne(100)) break; continue; }
 
                             // Capture is deliberately independent of inference cadence.
                             Common.camera.cameraCapture(token);
@@ -102,15 +94,10 @@ namespace Stone_Application.Infrastructure
                                 Console.WriteLine("[INFO] [THREAD #2] New Thread 2 cycle...");
                             }
 
-                            lock (Common.s_lockState)
-                            {
-                                if (Common.s_currentState != Common.currentState.STREAMING || !ipcServices.isSessionActive())
-                                {
-                                    // No dispatch is permitted between STOP and the next START.
-                                    if (token.WaitHandle.WaitOne(100)) break;
-                                    continue;
-                                }
-                            }
+                            bool streaming;
+                            lock (Common.s_lockState) streaming = Common.s_currentState == Common.currentState.STREAMING;
+                            if (!streaming || !ipcServices.isSessionActive())
+                            { if (token.WaitHandle.WaitOne(100)) break; continue; }
 
                             // Coalesce missed intervals: one in-flight AI request is supported by
                             // the existing event protocol, and each due request uses the newest frame.
@@ -122,79 +109,28 @@ namespace Stone_Application.Infrastructure
                             Common.s_stopWatchMain.Restart();
 
                             int inferenceSlot;
-                            if (!ipcServices.tryAcquireLatestFrame(out inferenceSlot))
-                                continue;
-
-                            lock (Common.s_lockState)
+                            long sessionToken;
+                            if (!ipcServices.TryDispatch(out inferenceSlot, out sessionToken)) continue;
+                            while (!token.IsCancellationRequested && ipcServices.HasPendingRequest(sessionToken))
                             {
-                                if (Common.s_currentState != Common.currentState.STREAMING || !ipcServices.isSessionActive())
+                                if (token.WaitHandle.WaitOne(50)) break;
+                                IInformation information;
+                                Event.IImage image;
+                                try
                                 {
-                                    ipcServices.releaseInferenceFrame(inferenceSlot);
-                                    continue;
+                                    if (ipcServices.CompleteInference(inferenceSlot, sessionToken, out information, out image))
+                                    {
+                                        // The inference slot is already released; UI delivery is asynchronous.
+                                        ipcServices.PublishIfCurrent(sessionToken, () =>
+                                        {
+                                            aiProcessEvent.notifyImage(image);
+                                            aiProcessEvent.notifyInformation(information);
+                                        });
+                                    }
                                 }
+                                catch (Exception ex) { Console.WriteLine("[ERROR] [RESULT] " + ex.Message); }
+                                if (!ipcServices.HasPendingRequest(sessionToken)) break;
                             }
-
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] Image taken from queue...");
-                            }
-
-                            try
-                            {
-                                ipcServices.writeTask(inferenceSlot);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine("[ERROR] [THREAD #2] writeTask failed: " + ex.Message);
-                                ipcServices.releaseInferenceFrame(inferenceSlot);
-                                continue;
-                            }
-
-                            Common.ui2aiEvent.Set();
-
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] UI to AI event set...");
-                            }
-
-                            // Wait for AI to respond, but allow periodic cancellation checks.
-                            while (!token.IsCancellationRequested)
-                            {
-                                // WaitOne with timeout to be able to check cancellation token regularly.
-                                if (Common.ai2uiEvent.WaitOne(200))
-                                    break;
-                            }
-
-                            if (token.IsCancellationRequested)
-                                break;
-
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] AI to UI event received...");
-                            }
-
-                            IInformation temporaryInformation;
-                            Event.IImage temporaryImage;
-                            try
-                            {
-                                (temporaryInformation, temporaryImage) = ipcServices.readTask();
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine("[ERROR] [THREAD #2] readTask failed: " + ex.Message);
-                                ipcServices.releaseInferenceFrame(inferenceSlot);
-                                continue;
-                            }
-
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] AI results read from shared memory...");
-                            }
-
-                            // A result that completed after STOP is intentionally discarded.
-                            // It must not update the database or UI of the finished session.
-                            if (ipcServices.isSessionActive())
-                            {
-                                aiProcessEvent.notifyImage(temporaryImage);
-                                aiProcessEvent.notifyInformation(temporaryInformation);
-                            }
-                            ipcServices.releaseInferenceFrame(inferenceSlot);
                         }
                     }
                     catch (OperationCanceledException)

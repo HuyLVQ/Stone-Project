@@ -8,9 +8,11 @@ When offline video inference completes successfully after STOP, the UI writes it
 
 - accumulated counts: `MiSang`, `1x2`, `2x4`, and `4x6`;
 - average per-frame values from the four weight models; and
-- the current session ID.
+- the current session ID;
+- analysis status (`Complete`, `Partial`, or `Unknown`); and
+- expected, processed, skipped, and recording-loss counts.
 
-The Excel export query now selects only rows marked `isFinalizedResult = TRUE`. It therefore produces one row per completed session from the offline evaluation, which is the required source of truth.
+The Excel export query selects only rows marked `isFinalizedResult = TRUE`. It produces one offline aggregate per finalized session. Usable partial analysis is retained under the skip-and-continue policy; Excel columns J-N explicitly show status and frame/loss counts. A finalized row does not by itself mean a complete recording.
 
 ## Database change
 
@@ -24,4 +26,6 @@ Before inserting a new final result, the repository deletes an earlier finalized
 
 ## Failure behavior
 
-If offline inference or final-result persistence fails, no finalized record is written. The Excel exporter omits that incomplete session rather than falling back to live estimates.
+If every frame fails, recording cannot finalize, offline processing fails as a whole, or final-result persistence fails, no new finalized record is written. Export does not fall back to live estimates. Recoverable frame failures allow a partial aggregate with explicit quality metadata. Existing rows without quality metadata default to `Unknown`.
+
+The recorder writes a JSON manifest listing finalized AVI segments and expected frame counts. Offline processing uses those counts to detect decoding gaps, attempts bounded frame-seek recovery, and averages model weights over successfully processed frames only.

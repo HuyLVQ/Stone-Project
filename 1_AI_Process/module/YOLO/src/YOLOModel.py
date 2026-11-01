@@ -58,6 +58,14 @@ class YOLOImpl():
                                        verbose = False,
                                        device = self.m_device)
         return inferenceResult
+
+    def inference_batch(self, p_images: list[np.ndarray]) -> list:
+        """Run YOLO on several frames in one model call."""
+        if not p_images:
+            return []
+        return list(self.m_model(p_images,
+                                 verbose=False,
+                                 device=self.m_device))
     
     
 
@@ -236,15 +244,16 @@ class YOLOImpl():
     def processAndVisualizeWithMultipleWeight(self,
                                               p_inferenceResult: any,
                                               p_ratioScale: float,
-                                              p_imgOriginal: np.ndarray) -> tuple[bytes, dict[str, int], float]:
+                                              p_imgOriginal: np.ndarray,
+                                              visualize: bool = True) -> tuple[bytes, dict[str, int], float]:
         if (p_ratioScale is None):
             p_ratioScale = self.m_RATIO_SCALE
             
         concernedRockType = list(self.m_TYPE_COLORS.keys())
 
         
-        imgDraw = p_imgOriginal.copy()
-        overlay = imgDraw.copy()
+        imgDraw = p_imgOriginal.copy() if visualize else None
+        overlay = imgDraw.copy() if visualize else None
         
         areaScale = p_ratioScale ** 2
         
@@ -285,25 +294,27 @@ class YOLOImpl():
                         
                         classificationCounts[rockType] += 1
 
-                        color = self.m_TYPE_COLORS[rockType]
-                        contourInt = np.array(contour, dtype=np.int32)
-                        boxOBB = np.int32(cv2.boxPoints(rect))
+                        if visualize:
+                            color = self.m_TYPE_COLORS[rockType]
+                            contourInt = np.array(contour, dtype=np.int32)
+                            boxOBB = np.int32(cv2.boxPoints(rect))
 
-                        cv2.fillPoly(overlay, [contourInt], color)
-                        cv2.polylines(imgDraw, [boxOBB], isClosed=True, color=(0, 255, 0), thickness=2)
+                            cv2.fillPoly(overlay, [contourInt], color)
+                            cv2.polylines(imgDraw, [boxOBB], isClosed=True, color=(0, 255, 0), thickness=2)
 
-                        M = cv2.moments(contourInt)
-                        if M["m00"] != 0:
-                            cX = int(M["m10"] / M["m00"])
-                            cY = int(M["m01"] / M["m00"])
-                        else:
-                            cX, cY = int(contour[0][0]), int(contour[0][1])
+                            M = cv2.moments(contourInt)
+                            if M["m00"] != 0:
+                                cX = int(M["m10"] / M["m00"])
+                                cY = int(M["m01"] / M["m00"])
+                            else:
+                                cX, cY = int(contour[0][0]), int(contour[0][1])
 
-                        text = f"ID:{i} - {rockType}"
-                        cv2.putText(imgDraw, text, (cX - 20, cY), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (255, 255, 255), 1)
-        
-        alpha = 0.28
-        cv2.addWeighted(overlay, alpha, imgDraw, 1 - alpha, 0, imgDraw)
+                            text = f"ID:{i} - {rockType}"
+                            cv2.putText(imgDraw, text, (cX - 20, cY), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (255, 255, 255), 1)
+
+        if visualize:
+            alpha = 0.28
+            cv2.addWeighted(overlay, alpha, imgDraw, 1 - alpha, 0, imgDraw)
 
 
         measuredWeightResults = []
@@ -325,4 +336,4 @@ class YOLOImpl():
                 print(measuredWeight, flush=True)
             measuredWeightResults.append(measuredWeight)
                         
-        return imgDraw.tobytes(), classificationCounts, measuredWeightResults
+        return imgDraw.tobytes() if visualize else b"", classificationCounts, measuredWeightResults

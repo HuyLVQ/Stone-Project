@@ -32,19 +32,23 @@ namespace Stone_Application.Forms
             this.pictureBox.SizeMode = PictureBoxSizeMode.Zoom;
         }
 
-        public static void updatePictureBox(Bitmap p_bmp)
+        // Takes ownership of the bitmap, including when the callback becomes stale.
+        public static void updatePictureBox(Bitmap bitmap, long sessionToken)
         {
-            if (s_instance != null && !s_instance.IsDisposed)
+            var form = s_instance;
+            if (form == null || form.IsDisposed || !form.IsHandleCreated) { bitmap.Dispose(); return; }
+            try
             {
-                if (s_instance.pictureBox.InvokeRequired)
+                form.BeginInvoke(new Action(() =>
                 {
-                    s_instance.pictureBox.Invoke(new Action(() => updatePictureBox(p_bmp)));
-                    return;
-                }
-
-                if (s_instance.pictureBox.Image != null) s_instance.pictureBox.Image.Dispose();
-                s_instance.pictureBox.Image = (Bitmap)p_bmp.Clone();
+                    if (form.IsDisposed || !Stone_Application.IPC.IPCServices.getInstance().IsCurrentSession(sessionToken))
+                    { bitmap.Dispose(); return; }
+                    var previous = form.pictureBox.Image;
+                    form.pictureBox.Image = bitmap;
+                    previous?.Dispose();
+                }));
             }
+            catch (InvalidOperationException) { bitmap.Dispose(); }
         }
 
         public static void enableStreaming()
@@ -63,6 +67,14 @@ namespace Stone_Application.Forms
                 }
             }));
 
+        }
+
+        public static void requireAiInitialization()
+        {
+            if (s_instance == null || s_instance.IsDisposed) return;
+            s_instance.m_startButton.Enabled = false;
+            s_instance.m_stopButton.Enabled = false;
+            lock (Common.s_lockState) Common.s_currentState = Common.currentState.UN_INIT;
         }
 
         public static void disableStreaming()
@@ -84,18 +96,27 @@ namespace Stone_Application.Forms
 
         private void startButtonClick(object sender, EventArgs e)
         {
-            Stone_Application.IPC.IPCServices.getInstance().beginSession();
-            Common.StartPostgreSqlSession();
-            Common.videoRecorder.StartSession();
-            Common.s_stopWatchMain.Restart();
-            enableStreaming();
-            lock (Common.s_lockState)
+            var ipc = Stone_Application.IPC.IPCServices.getInstance();
+            try
             {
-                Common.s_currentState = Common.currentState.STREAMING;
+                if (!AIHelper.IsLiveReady || Common.pythonProcess == null || Common.pythonProcess.HasExited)
+                { AIHelper.initializeAI(); AIHelper.warmUpAI(); }
+                Common.StartPostgreSqlSession();
+                ipc.beginSession();
+                Common.videoRecorder.StartSession(ipc.SessionToken);
+                Common.s_stopWatchMain.Restart();
+                enableStreaming();
+                lock (Common.s_lockState) Common.s_currentState = Common.currentState.STREAMING;
+            }
+            catch (Exception ex)
+            {
+                ipc.deactivateSession();
+                try { Common.videoRecorder.StopSession(); } catch (Exception cleanup) { Console.WriteLine(cleanup.Message); }
+                MessageBox.Show(this, "Could not start recording.\n\n" + ex.Message, "Session error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        private void stopButtonClick(object sender, EventArgs e)
+        private async void stopButtonClick(object sender, EventArgs e)
         {
             disableStreaming();
             lock (Common.s_lockState)
@@ -103,54 +124,72 @@ namespace Stone_Application.Forms
                 Common.s_currentState = Common.currentState.READY;
             }
 
-            // This blocks only until a request that was already sent to the live
-            // AI process has completed and been discarded. It is then safe to
-            // erase both shared-memory regions before the offline pass starts.
-            Stone_Application.IPC.IPCServices.getInstance().endSessionAndClear();
-            string videoPath = Common.videoRecorder.StopSession();
-            //Common.s_imageQueue = new BlockingCollection<Stone_Application.Event.IImage>(new ConcurrentQueue<Stone_Application.Event.IImage>(), Config.BUFFER_BOUND);
-            while (Common.s_imageQueue.TryTake(out _))
-            {
-                ;
-            }
-
-            // The offline pass is deliberately synchronous: a new recording cannot begin
-            // until the finalized recording has become the authoritative result.
             this.m_startButton.Enabled = false;
             this.m_stopButton.Enabled = false;
             this.UseWaitCursor = true;
+            var ipc = Stone_Application.IPC.IPCServices.getInstance();
+            bool memorySafe = false;
+            bool aiSettled = false;
+            AIHelper.VideoInferenceResult result = null;
             try
             {
-                AIHelper.VideoInferenceResult result = AIHelper.runVideoInference(videoPath);
-                Common.PersistFinalSessionResult(new Stone_Application.Event.IInformation
+                await Task.Run(() =>
                 {
-                    countMiSang = checked((long)Math.Round(result.MiSang)),
-                    count1x2 = checked((long)Math.Round(result.OneByTwo)),
-                    count2x4 = checked((long)Math.Round(result.TwoByFour)),
-                    count4x6 = checked((long)Math.Round(result.FourBySix)),
-                    measuredWeight1 = checked((float)result.AverageWeights[0]),
-                    measuredWeight2 = checked((float)result.AverageWeights[1]),
-                    measuredWeight3 = checked((float)result.AverageWeights[2]),
-                    measuredWeight4 = checked((float)result.AverageWeights[3])
+                    ipc.deactivateSession();
+                    Common.videoRecorder.StopAccepting();
+                    string videoPath;
+                    try
+                    {
+                        aiSettled = ipc.endSessionAndClear();
+                        memorySafe = true;
+                    }
+                    finally
+                    {
+                        // Recording drains/finalizes even when live AI recovery fails.
+                        videoPath = Common.videoRecorder.StopSession();
+                    }
+
+                    result = AIHelper.runVideoInference(videoPath);
+                    Common.PersistFinalSessionResult(new Stone_Application.Event.IInformation
+                    {
+                        analysisStatus = result.Status,
+                        expectedFrames = result.ExpectedFrames,
+                        processedFrames = result.FrameCount,
+                        skippedFrames = result.SkippedFrames,
+                        droppedFrames = result.DroppedFrames,
+                        countMiSang = checked((long)Math.Round(result.MiSang)),
+                        count1x2 = checked((long)Math.Round(result.OneByTwo)),
+                        count2x4 = checked((long)Math.Round(result.TwoByFour)),
+                        count4x6 = checked((long)Math.Round(result.FourBySix)),
+                        measuredWeight1 = checked((float)result.AverageWeights[0]),
+                        measuredWeight2 = checked((float)result.AverageWeights[1]),
+                        measuredWeight3 = checked((float)result.AverageWeights[2]),
+                        measuredWeight4 = checked((float)result.AverageWeights[3])
+                    });
                 });
-                MessageBox.Show(this, FormatVideoInferenceResult(result), "Video inference result", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string aiWarning = aiSettled ? "" : "\n\nLive AI timed out and was terminated. It will be restarted before the next session.";
+                MessageBox.Show(this, FormatVideoInferenceResult(result) + aiWarning,
+                    "Video inference result", MessageBoxButtons.OK,
+                    result.Status == "Complete" && aiSettled ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "The recording was finalized, but video inference failed.\n\n" + ex.Message,
-                    "Video inference error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, "The session could not finish successfully. No finalized aggregate was saved.\n\n" + ex.Message,
+                    "Session completion error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
                 this.UseWaitCursor = false;
-                this.m_startButton.Enabled = true;
+                this.m_startButton.Enabled = memorySafe;
                 this.m_startButton.ForeColor = System.Drawing.SystemColors.ControlText;
             }
         }
 
         private static string FormatVideoInferenceResult(AIHelper.VideoInferenceResult p_result)
         {
-            return String.Format(System.Globalization.CultureInfo.InvariantCulture,
+            return "Analysis status: " + p_result.Status + "\nExpected recorded frames: " + p_result.ExpectedFrames +
+                "\nSkipped/unreadable frames: " + p_result.SkippedFrames + "\nCapture/queue/recording losses: " + p_result.DroppedFrames + "\n\n" +
+                String.Format(System.Globalization.CultureInfo.InvariantCulture,
                 "Frames processed: {0}\n\nAccumulated counts\n  MiSang: {1:F0}\n  1x2: {2:F0}\n  2x4: {3:F0}\n  4x6: {4:F0}\n\nAverage per-frame weights\n  Polynomial: {5:F2}\n  Random forest: {6:F2}\n  XGBoost: {7:F2}\n  XGBoost v2: {8:F2}",
                 p_result.FrameCount, p_result.MiSang, p_result.OneByTwo, p_result.TwoByFour, p_result.FourBySix,
                 p_result.AverageWeights[0], p_result.AverageWeights[1], p_result.AverageWeights[2], p_result.AverageWeights[3]);

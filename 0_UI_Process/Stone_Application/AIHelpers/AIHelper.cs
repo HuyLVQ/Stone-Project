@@ -15,9 +15,18 @@ using Stone_Application;
 
 public sealed class AIHelper
 {
+    private static volatile bool s_liveReady;
+    private static readonly object s_pythonOutputLock = new object();
+    private static readonly StringBuilder s_pythonErrorOutput = new StringBuilder();
+    public static bool IsLiveReady { get { return s_liveReady; } }
+    public static void MarkUnavailable() { s_liveReady = false; }
     public sealed class VideoInferenceResult
     {
         public int FrameCount { get; set; }
+        public long ExpectedFrames { get; set; }
+        public long SkippedFrames { get; set; }
+        public long DroppedFrames { get; set; }
+        public string Status { get; set; }
         public double MiSang { get; set; }
         public double OneByTwo { get; set; }
         public double TwoByFour { get; set; }
@@ -33,7 +42,7 @@ public sealed class AIHelper
         ProcessStartInfo psi = new ProcessStartInfo
         {
             FileName = Config.s_pythonEnvPath,
-            Arguments = "\"" + Config.s_videoInferenceScriptPath + "\" \"" + p_videoPath + "\"",
+            Arguments = "\"" + Config.s_videoInferenceScriptPath + "\" \"" + p_videoPath + "\" --recovery-limit " + Config.VIDEO_DECODE_RECOVERY_LIMIT,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -54,38 +63,59 @@ public sealed class AIHelper
             if (resultLine == null)
                 throw new InvalidOperationException("Video inference did not return a result. " + error);
 
-            Dictionary<string, double> values = resultLine.Split('|').Skip(1)
-                .Select(p_value => p_value.Split('='))
-                .ToDictionary(p_parts => p_parts[0], p_parts => Double.Parse(p_parts[1], System.Globalization.CultureInfo.InvariantCulture));
-
-            return new VideoInferenceResult
-            {
-                FrameCount = (int)values["frames"],
-                MiSang = values["MiSang"],
-                OneByTwo = values["1x2"],
-                TwoByFour = values["2x4"],
-                FourBySix = values["4x6"],
-                AverageWeights = new[] { values["weight1"], values["weight2"], values["weight3"], values["weight4"] }
-            };
+            return ParseVideoResult(resultLine);
         }
+    }
+
+    public static VideoInferenceResult ParseVideoResult(string line)
+    {
+        if (line == null || !line.StartsWith("VIDEO_RESULT|")) throw new FormatException("Missing video summary.");
+        var values = line.Split('|').Skip(1).Select(part => part.Split('='))
+            .ToDictionary(parts => parts[0], parts => Double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture));
+        if (values.Values.Any(value => Double.IsNaN(value) || Double.IsInfinity(value))) throw new FormatException("Non-finite video summary.");
+        Func<string, long> count = name =>
+        {
+            double value = values[name];
+            if (value < 0 || value > Int64.MaxValue || value != Math.Truncate(value)) throw new FormatException("Invalid " + name);
+            return checked((long)value);
+        };
+        long frames = count("frames"), expected = count("expected"), skipped = count("skipped"), dropped = count("dropped");
+        if (frames == 0 || frames > Int32.MaxValue || count("complete") > 1 || count("known") > 1)
+            throw new FormatException("Invalid completion summary.");
+        if (values["known"] == 1 && frames + skipped != expected) throw new FormatException("Inconsistent frame accounting.");
+        bool complete = values["complete"] == 1;
+        if (complete && (values["known"] != 1 || frames != expected || skipped != 0 || dropped != 0))
+            throw new FormatException("Incomplete recording labeled complete.");
+        return new VideoInferenceResult
+        {
+            FrameCount = (int)frames, ExpectedFrames = expected, SkippedFrames = skipped, DroppedFrames = dropped,
+            Status = complete ? "Complete" : values["known"] == 1 ? "Partial" : "Unknown",
+            MiSang = count("MiSang"), OneByTwo = count("1x2"), TwoByFour = count("2x4"), FourBySix = count("4x6"),
+            AverageWeights = new[] { values["weight1"], values["weight2"], values["weight3"], values["weight4"] }
+        };
     }
 
     public static void initializeAI()
     {
+        RequireFile(Config.s_pythonEnvPath, "Python environment executable");
+        RequireFile(Config.s_pythonScriptPath, "Live AI entry point");
+        RequireFile(Config.s_tempImagePath, "AI warm-up image");
 
-
-
+        var ipc = Stone_Application.IPC.IPCServices.getInstance();
+        if (ipc.isSessionActive()) throw new InvalidOperationException("Cannot restart live AI during an active session.");
+        s_liveReady = false;
         if (Common.pythonProcess != null && !Common.pythonProcess.HasExited)
         {
-            try { Common.pythonProcess.Kill(); Common.pythonProcess.WaitForExit(); }
-            catch (Exception e) { 
-                Console.WriteLine("[WARN] Previous AI process terminated failed\n" + e.Message);
-            } 
+            StopPythonProcess();
         }
+
+        Common.ui2aiEvent.Reset(); Common.ai2uiEvent.Reset();
+        lock (s_pythonOutputLock) s_pythonErrorOutput.Length = 0;
 
         ProcessStartInfo psi = new ProcessStartInfo
         {
             FileName = Config.s_pythonEnvPath,
+            WorkingDirectory = Path.Combine(Config.s_rootPath, "1_AI_Process"),
             Arguments = $"\"{Config.s_pythonScriptPath}\" " +
                         $"\"{Config.MMF_TAGNAME}\" " +
                         $"\"{Config.UI_2_AI_EVENT_TAGNAME}\" " +
@@ -113,7 +143,11 @@ public sealed class AIHelper
         Common.pythonProcess.ErrorDataReceived += (p_s, p_errArgs) =>
         {
             if (p_errArgs.Data != null)
+            {
+                lock (s_pythonOutputLock)
+                    s_pythonErrorOutput.AppendLine(p_errArgs.Data);
                 Console.WriteLine("[ERROR] [PY] " + p_errArgs.Data);
+            }
         };
 
         Common.pythonProcess.Start();
@@ -121,23 +155,90 @@ public sealed class AIHelper
         Common.pythonProcess.BeginErrorReadLine();
     }
 
+    private static void RequireFile(string path, string description)
+    {
+        if (!File.Exists(path))
+            throw new FileNotFoundException(description + " was not found. Check the Stone Project installation path.", path);
+    }
+
 
 
     public static void warmUpAI()
+    {
+        s_liveReady = false;
+        try
+        {
+            WarmUpCore();
+            if (Common.pythonProcess == null || Common.pythonProcess.HasExited)
+                throw new InvalidOperationException("AI exited during warm-up.");
+            s_liveReady = true;
+        }
+        catch
+        {
+            StopPythonProcess();
+            throw;
+        }
+    }
+
+    private static void StopPythonProcess()
+    {
+        Process process = Common.pythonProcess;
+        if (process == null) return;
+
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill();
+                if (!process.WaitForExit(Config.AI_EXIT_TIMEOUT_MS))
+                    throw new TimeoutException("Failed warm-up could not stop Python; shared memory must not be reused.");
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // The child can exit between HasExited and Kill. Preserve the
+            // initialization error instead of replacing it with a cleanup race.
+            if (!HasExited(process)) throw;
+        }
+    }
+
+    private static bool HasExited(Process process)
+    {
+        try { return process.HasExited; }
+        catch (InvalidOperationException) { return true; }
+    }
+
+    private static string GetPythonExitDetails()
+    {
+        string output;
+        lock (s_pythonOutputLock) output = s_pythonErrorOutput.ToString().Trim();
+
+        int? exitCode = null;
+        try
+        {
+            if (Common.pythonProcess != null && Common.pythonProcess.HasExited)
+                exitCode = Common.pythonProcess.ExitCode;
+        }
+        catch (InvalidOperationException) { }
+
+        string details = exitCode.HasValue ? "Python exited with code " + exitCode.Value + "." : "Python exited.";
+        if (!String.IsNullOrWhiteSpace(output)) details += Environment.NewLine + output;
+        return details;
+    }
+
+    private static void WarmUpCore()
     {
         // Ensure IPC resources are initialized before using Common.mmf and events.
         Stone_Application.IPC.IPCServices.getInstance();
 
         if (Common.mmf == null)
         {
-            Console.WriteLine("[ERROR] IPC not initialized — MemoryMappedFile is null. Aborting warm-up.");
-            return;
+            throw new InvalidOperationException("IPC mapping is not initialized for warm-up.");
         }
 
         if (Common.ui2aiEvent == null || Common.ai2uiEvent == null)
         {
-            Console.WriteLine("[ERROR] IPC events not initialized. Aborting warm-up.");
-            return;
+            throw new InvalidOperationException("IPC events are not initialized for warm-up.");
         }
 
         using (Image originalImage = Image.FromFile(Config.s_tempImagePath))
@@ -146,7 +247,7 @@ public sealed class AIHelper
                                                     Config.IMAGE_WIDTH,
                                                     Config.IMAGE_HEIGHT))
         {
-            for (int i = 20; i > 0; i--)
+            for (int i = Config.AI_WARMUP_ITERATIONS; i > 0; i--)
             {
                 using (MemoryMappedViewStream stream =
                     Common.mmf.CreateViewStream(Config.IMAGE_BUFFER_HEADER_SIZE, Config.IMAGE_BYTE_COUNT))
@@ -177,10 +278,13 @@ public sealed class AIHelper
                     writer.Write(0);
                 Common.ui2aiEvent.Set();
 
-                if (!Common.ai2uiEvent.WaitOne(TimeSpan.FromSeconds(5)))
+                if (!Common.ai2uiEvent.WaitOne(Config.AI_WARMUP_TIMEOUT_MS))
                 {
-                    Console.WriteLine("[ERROR] AI warm-up timeout");
-                    break;
+                    if (Common.pythonProcess != null && HasExited(Common.pythonProcess))
+                        throw new InvalidOperationException("AI exited before responding to warm-up. " + GetPythonExitDetails());
+                    throw new TimeoutException("AI did not finish warm-up request " +
+                        (Config.AI_WARMUP_ITERATIONS - i + 1) + " of " + Config.AI_WARMUP_ITERATIONS + " within " +
+                        (Config.AI_WARMUP_TIMEOUT_MS / 1000) + " seconds.");
                 }
 
                 Console.WriteLine($"[INFO] [UI-AI] AI Warm-up Count: {i}");
