@@ -17,7 +17,11 @@ public sealed class AIHelper
 {
     private static volatile bool s_liveReady;
     private static readonly object s_pythonOutputLock = new object();
+    private static readonly object s_offlineLock = new object();
     private static readonly StringBuilder s_pythonErrorOutput = new StringBuilder();
+    private static Process s_offlineProcess;
+    private static TaskCompletionSource<bool> s_offlineReady;
+    private static TaskCompletionSource<string> s_offlineResponse;
     public static bool IsLiveReady { get { return s_liveReady; } }
     public static void MarkUnavailable() { s_liveReady = false; }
     public sealed class VideoInferenceResult
@@ -38,32 +42,122 @@ public sealed class AIHelper
     {
         if (String.IsNullOrWhiteSpace(p_videoPath) || !File.Exists(p_videoPath))
             throw new FileNotFoundException("The finalized recording could not be found.", p_videoPath);
-
-        ProcessStartInfo psi = new ProcessStartInfo
+        TaskCompletionSource<string> response;
+        lock (s_offlineLock)
         {
-            FileName = Config.s_pythonEnvPath,
-            Arguments = "\"" + Config.s_videoInferenceScriptPath + "\" \"" + p_videoPath + "\" --recovery-limit " + Config.VIDEO_DECODE_RECOVERY_LIMIT,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
+            if (s_offlineProcess == null || s_offlineProcess.HasExited)
+                throw new InvalidOperationException("The offline inference worker is not ready. Reconnect AI and try again.");
+            if (s_offlineResponse != null)
+                throw new InvalidOperationException("The offline inference worker is already processing a recording.");
+            response = s_offlineResponse = new TaskCompletionSource<string>();
+            try { s_offlineProcess.StandardInput.WriteLine("offline_signal_inference|" + Path.GetFullPath(p_videoPath)); s_offlineProcess.StandardInput.Flush(); }
+            catch { s_offlineResponse = null; throw; }
+        }
 
-        using (Process process = Process.Start(psi))
+        string resultLine;
+        try
         {
-            Task<string> errorTask = process.StandardError.ReadToEndAsync();
-            string output = process.StandardOutput.ReadToEnd();
-            string error = errorTask.GetAwaiter().GetResult();
-            process.WaitForExit();
-            if (process.ExitCode != 0)
-                throw new InvalidOperationException("Video inference failed: " + error);
+            if (!response.Task.Wait(TimeSpan.FromMinutes(30)))
+                throw new TimeoutException("Offline inference did not finish within 30 minutes.");
+            resultLine = response.Task.GetAwaiter().GetResult();
+        }
+        finally
+        {
+            lock (s_offlineLock) if (ReferenceEquals(s_offlineResponse, response)) s_offlineResponse = null;
+        }
+        if (resultLine.StartsWith("OFFLINE_ERROR|"))
+            throw new InvalidOperationException("Video inference failed: " + resultLine.Substring("OFFLINE_ERROR|".Length));
+        return ParseVideoResult(resultLine);
+    }
 
-            string resultLine = output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
-                                      .LastOrDefault(p_line => p_line.StartsWith("VIDEO_RESULT|"));
-            if (resultLine == null)
-                throw new InvalidOperationException("Video inference did not return a result. " + error);
+    public static void InitializeOfflineWorker()
+    {
+        lock (s_offlineLock)
+        {
+            if (s_offlineProcess != null && !s_offlineProcess.HasExited && s_offlineReady != null && s_offlineReady.Task.IsCompleted)
+                return;
+            RequireFile(Config.s_pythonEnvPath, "Python environment executable");
+            RequireFile(Config.s_offlineWorkerScriptPath, "Offline inference worker");
+            s_offlineReady = new TaskCompletionSource<bool>();
+            s_offlineResponse = null;
+            lock (s_pythonOutputLock) s_pythonErrorOutput.Length = 0;
+            ProcessStartInfo psi = new ProcessStartInfo
+            {
+                FileName = Config.s_pythonEnvPath,
+                WorkingDirectory = Path.Combine(Config.s_rootPath, "1_AI_Process"),
+                Arguments = "\"" + Config.s_offlineWorkerScriptPath + "\"",
+                UseShellExecute = false,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            s_offlineProcess = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            s_offlineProcess.Exited += (sender, args) =>
+            {
+                lock (s_offlineLock)
+                {
+                    s_offlineReady?.TrySetException(new InvalidOperationException(
+                        "Offline inference worker exited before becoming ready. " + GetOfflineExitDetails()));
+                    s_offlineResponse?.TrySetResult("OFFLINE_ERROR|Offline inference worker exited unexpectedly.");
+                }
+            };
+            s_offlineProcess.OutputDataReceived += (sender, args) =>
+            {
+                if (args.Data == null) return;
+                if (args.Data == "OFFLINE_READY") { s_offlineReady.TrySetResult(true); return; }
+                if (args.Data.StartsWith("VIDEO_RESULT|") || args.Data.StartsWith("OFFLINE_ERROR|"))
+                {
+                    lock (s_offlineLock) s_offlineResponse?.TrySetResult(args.Data);
+                }
+                else if (Config.s_isDebugMode) Console.WriteLine("[PY-OFFLINE] " + args.Data);
+            };
+            s_offlineProcess.ErrorDataReceived += (sender, args) =>
+            {
+                if (args.Data == null) return;
+                lock (s_pythonOutputLock) s_pythonErrorOutput.AppendLine(args.Data);
+                if (Config.s_isDebugMode) Console.WriteLine("[ERROR] [PY-OFFLINE] " + args.Data);
+            };
+            s_offlineProcess.Start();
+            s_offlineProcess.BeginOutputReadLine();
+             s_offlineProcess.BeginErrorReadLine();
+        }
 
-            return ParseVideoResult(resultLine);
+        bool becameReady;
+        try { becameReady = s_offlineReady.Task.Wait(TimeSpan.FromMinutes(3)); }
+        catch (AggregateException ex) { throw ex.GetBaseException(); }
+        if (!becameReady)
+        {
+            StopOfflineWorker();
+            throw new TimeoutException("Offline model did not load and warm up within 3 minutes.");
+        }
+        s_offlineReady.Task.GetAwaiter().GetResult();
+    }
+
+    private static string GetOfflineExitDetails()
+    {
+        string output;
+        lock (s_pythonOutputLock) output = s_pythonErrorOutput.ToString().Trim();
+        return String.IsNullOrWhiteSpace(output) ? "No Python stderr was captured." : Environment.NewLine + output;
+    }
+
+    public static void StopOfflineWorker()
+    {
+        Process process;
+        lock (s_offlineLock) process = s_offlineProcess;
+        if (process == null) return;
+        try
+        {
+            if (!process.HasExited)
+            {
+                try { process.StandardInput.WriteLine("SHUTDOWN"); process.StandardInput.Flush(); } catch { }
+                if (!process.WaitForExit(5000)) { process.Kill(); process.WaitForExit(5000); }
+            }
+        }
+        finally
+        {
+            lock (s_offlineLock) { if (ReferenceEquals(s_offlineProcess, process)) s_offlineProcess = null; }
+            process.Dispose();
         }
     }
 
@@ -140,19 +234,19 @@ public sealed class AIHelper
                     Console.WriteLine("[PY] " + p_outArgs.Data);
         };
 
-        Common.pythonProcess.ErrorDataReceived += (p_s, p_errArgs) =>
-        {
-            if (p_errArgs.Data != null)
-            {
-                lock (s_pythonOutputLock)
-                    s_pythonErrorOutput.AppendLine(p_errArgs.Data);
-                Console.WriteLine("[ERROR] [PY] " + p_errArgs.Data);
-            }
-        };
+        // Common.pythonProcess.ErrorDataReceived += (p_s, p_errArgs) =>
+        // {
+        //     if (p_errArgs.Data != null)
+        //     {
+        //         lock (s_pythonOutputLock)
+        //             s_pythonErrorOutput.AppendLine(p_errArgs.Data);
+        //         Console.WriteLine("[ERROR] [PY] " + p_errArgs.Data);
+        //     }
+        // };
 
         Common.pythonProcess.Start();
         Common.pythonProcess.BeginOutputReadLine();
-        Common.pythonProcess.BeginErrorReadLine();
+         Common.pythonProcess.BeginErrorReadLine();
     }
 
     private static void RequireFile(string path, string description)

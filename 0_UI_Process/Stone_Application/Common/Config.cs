@@ -7,10 +7,10 @@ using System.Threading.Tasks;
 
 public static class Config
 {
-    public const bool s_isDebugMode = false;
+    public const bool s_isDebugMode = true;
 
     public const int EXPOSURE_TIME = 5_000;
-    public const int TIME_INTERVAL = 880;
+    public const int TIME_INTERVAL = 100;
     public const int IMAGE_WIDTH = 1_920;                           // Image width of the camera
     public const int IMAGE_HEIGHT = 1_200;                          // Image height of the camera
 
@@ -46,6 +46,7 @@ public static class Config
     public static readonly string s_pythonEnvPath = Path.Combine(s_rootPath, "1_AI_Process", ".venv", "Scripts", "python.exe");
     public static readonly string s_pythonScriptPath = Path.Combine(s_rootPath, "1_AI_Process", "src", "main.py");
     public static readonly string s_videoInferenceScriptPath = Path.Combine(s_rootPath, "1_AI_Process", "src", "video_inference.py");
+    public static readonly string s_offlineWorkerScriptPath = Path.Combine(s_rootPath, "1_AI_Process", "src", "offline_worker.py");
     public static readonly string s_tempImagePath = Path.Combine(s_rootPath, "1_AI_Process", "test_img.jpg");
 
     public static readonly string s_templateDir = Path.Combine(s_rootPath, "0_UI_Process", "Stone_Application", "PDF_Reference");
@@ -71,7 +72,7 @@ public static class Config
     public const int VIDEO_QUEUE_CAPACITY = 8; // About 53 MiB of queued raw frames.
     public const int AI_STOP_TIMEOUT_MS = 15_000;
     public const int AI_EXIT_TIMEOUT_MS = 5_000;
-    public const int AI_WARMUP_TIMEOUT_MS = 60_000;
+    public const int AI_WARMUP_TIMEOUT_MS = 120_000;
     public const int AI_WARMUP_ITERATIONS = 20;
     public const int VIDEO_DECODE_RECOVERY_LIMIT = 30;
     public static readonly string s_videoOutputPath =

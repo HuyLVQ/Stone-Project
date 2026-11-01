@@ -144,6 +144,7 @@ namespace Stone_Application
             Common.videoRecorder.StopAccepting();
             RunCleanupAction("threads", Infrastructure.MultiThread.StopAll);
             RunCleanupAction("video recording", () => Common.videoRecorder.StopSession());
+            RunCleanupAction("offline inference worker", AIHelper.StopOfflineWorker);
             RunCleanupAction("application resources", FormSettings.CleanupAllResources);
             RunCleanupAction("measurement database", Common.ResetRepository);
             RunCleanupAction("Docker services", InitService.DisposeService.cleanupService);

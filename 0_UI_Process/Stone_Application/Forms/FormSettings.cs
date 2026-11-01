@@ -124,6 +124,7 @@ namespace Stone_Application.Forms
                 {
                     AIHelper.initializeAI();
                     AIHelper.warmUpAI();
+                    AIHelper.InitializeOfflineWorker();
                 });
                 FormHome.disableStreaming();
                 MessageBox.Show(this, "AI initialized sucessfully.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);

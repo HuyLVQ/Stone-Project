@@ -164,6 +164,14 @@ def result_line(result, dropped, trusted):
     return "VIDEO_RESULT|" + "|".join("{}={}".format(key, value) for key, value in fields)
 
 
+def run_recording(recording, model, recovery_limit=30, batch_size=8):
+    segments, dropped, trusted = load_recording(recording)
+    from utils.config import IMAGE_WIDTH, IMAGE_HEIGHT
+    result = analyze(segments, model, IMAGE_WIDTH, IMAGE_HEIGHT,
+                     recovery_limit, batch_size=batch_size)
+    return result_line(result, dropped, trusted)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("recording", help="Finalized session JSON manifest or standalone video")
@@ -173,12 +181,8 @@ def main():
     args = parser.parse_args()
     if args.batch_size < 1:
         parser.error("--batch-size must be positive")
-    segments, dropped, trusted = load_recording(args.recording)
     from module.YOLO.src.YOLOModel import YOLOImpl
-    from utils.config import IMAGE_WIDTH, IMAGE_HEIGHT
-    result = analyze(segments, YOLOImpl(), IMAGE_WIDTH, IMAGE_HEIGHT,
-                     args.recovery_limit, batch_size=args.batch_size)
-    print(result_line(result, dropped, trusted), flush=True)
+    print(run_recording(args.recording, YOLOImpl(), args.recovery_limit, args.batch_size), flush=True)
 
 
 if __name__ == "__main__":
