@@ -188,11 +188,9 @@ namespace Stone_Application.Forms
 
         private static string FormatVideoInferenceResult(AIHelper.VideoInferenceResult p_result)
         {
-            return "Analysis status: " + p_result.Status + "\nExpected sampled frames: " + p_result.ExpectedFrames +
-                "\nSkipped/unreadable samples: " + p_result.SkippedFrames + "\nCapture/queue/recording losses: " + p_result.DroppedFrames + "\n\n" +
-                String.Format(System.Globalization.CultureInfo.InvariantCulture,
-                "Samples processed: {0}\n\nAccumulated counts from sampled frames\n  MiSang: {1:F0}\n  1x2: {2:F0}\n  2x4: {3:F0}\n  4x6: {4:F0}\n\nWeight_v2 aggregate XGBoost prediction: {5:F2} kg",
-                p_result.FrameCount, p_result.MiSang, p_result.OneByTwo, p_result.TwoByFour, p_result.FourBySix,
+            return String.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "Accumulated inference counts\n  MiSang: {0:F0}\n  1x2: {1:F0}\n  2x4: {2:F0}\n  4x6: {3:F0}\n\nWeight prediction: {4:F2} kg",
+                p_result.MiSang, p_result.OneByTwo, p_result.TwoByFour, p_result.FourBySix,
                 p_result.AverageWeights[0]);
         }
     }

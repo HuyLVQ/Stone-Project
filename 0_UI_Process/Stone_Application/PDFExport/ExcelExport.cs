@@ -27,13 +27,6 @@ namespace Stone_Application.PDFExport
                 {
                     Worksheet worksheet = document.WorkbookPart.WorksheetParts.First().Worksheet;
                     SheetData sheetData = worksheet.GetFirstChild<SheetData>();
-                    Row qualityHeader = GetOrCreateRow(sheetData, FirstDataRow - 1);
-                    SetTextCell(qualityHeader, "J", FirstDataRow - 1, "Analysis status");
-                    SetTextCell(qualityHeader, "K", FirstDataRow - 1, "Expected frames");
-                    SetTextCell(qualityHeader, "L", FirstDataRow - 1, "Processed frames");
-                    SetTextCell(qualityHeader, "M", FirstDataRow - 1, "Skipped frames");
-                    SetTextCell(qualityHeader, "N", FirstDataRow - 1, "Recording losses");
-
                     uint rowIndex = FirstDataRow;
                     foreach (IInformation measurement in p_measurements)
                     {
@@ -47,16 +40,6 @@ namespace Stone_Application.PDFExport
                         SetNumericCell(row, "D", rowIndex, CalculatePercentage(measurement.count2x4, totalCount));
                         SetNumericCell(row, "E", rowIndex, CalculatePercentage(measurement.count4x6, totalCount));
                         SetNumericCell(row, "F", rowIndex, measurement.measuredWeight1);
-                        SetTextCell(row, "J", rowIndex, measurement.analysisStatus);
-                        SetNumericCell(row, "K", rowIndex, measurement.expectedFrames);
-                        SetNumericCell(row, "L", rowIndex, measurement.processedFrames);
-                        SetNumericCell(row, "M", rowIndex, measurement.skippedFrames);
-                        SetNumericCell(row, "N", rowIndex, measurement.droppedFrames);
-                        if (Config.s_isDebugMode == true) {
-                            SetNumericCell(row, "G", rowIndex, measurement.measuredWeight2);
-                            SetNumericCell(row, "H", rowIndex, measurement.measuredWeight3);
-                            SetNumericCell(row, "I", rowIndex, measurement.measuredWeight4);
-                        }
                         rowIndex++;
                     }
 
@@ -101,16 +84,6 @@ namespace Stone_Application.PDFExport
 
             cell.DataType = CellValues.Number;
             cell.CellValue = new CellValue(p_value.ToString("0.##", CultureInfo.InvariantCulture));
-        }
-
-        private static void SetTextCell(Row row, string column, uint index, string value)
-        {
-            string reference = column + index;
-            Cell cell = row.Elements<Cell>().FirstOrDefault(item => item.CellReference?.Value == reference);
-            if (cell == null) { cell = new Cell { CellReference = reference }; InsertCell(row, cell); }
-            cell.DataType = CellValues.InlineString;
-            cell.CellValue = null;
-            cell.InlineString = new InlineString(new Text(value ?? "Unknown"));
         }
 
         private static void InsertCell(Row row, Cell cell)
