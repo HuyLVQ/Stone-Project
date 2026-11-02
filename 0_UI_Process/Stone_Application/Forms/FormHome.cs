@@ -16,6 +16,40 @@ namespace Stone_Application.Forms
     {
         private MainForm m_mainForm;
         private static FormHome s_instance;
+        private bool m_aiInitialized;
+        private bool m_memorySafe = true;
+        public bool IsCompletingSession { get; private set; }
+        public bool HasInitializedAi => m_aiInitialized;
+
+        public void RefreshSessionControls()
+        {
+            bool connected = Common.camera != null && Common.camera.IsConnected;
+            bool streaming;
+            lock (Common.s_lockState) streaming = Common.s_currentState == Common.currentState.STREAMING;
+            m_startButton.Enabled = connected && m_aiInitialized && m_memorySafe && !IsCompletingSession && !streaming;
+            m_stopButton.Enabled = connected && streaming && !IsCompletingSession;
+            m_startButton.ForeColor = m_startButton.Enabled ? SystemColors.ControlText : SystemColors.ActiveBorder;
+            m_stopButton.ForeColor = m_stopButton.Enabled ? SystemColors.ControlText : SystemColors.ActiveBorder;
+        }
+
+        public async Task HandleCameraDisconnectedAsync()
+        {
+            RefreshSessionControls();
+            bool streaming;
+            lock (Common.s_lockState) streaming = Common.s_currentState == Common.currentState.STREAMING;
+            if (streaming && !IsCompletingSession)
+                await CompleteSessionAsync(true);
+            else
+                ShowCameraDisconnectedMessage(IsCompletingSession);
+        }
+
+        private void ShowCameraDisconnectedMessage(bool completing)
+        {
+            MessageBox.Show(m_mainForm, "The camera connection has been lost or image acquisition has been interrupted.\n\n" +
+                (completing ? "The session is stopping. Its recording is being finalized for offline analysis.\n\n" : "") +
+                "Check the camera connection and power, then use Connect Camera in Settings to retry.",
+                "Camera disconnected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
         public FormHome(MainForm p_mainForm)
         {
             InitializeComponent();
@@ -72,6 +106,7 @@ namespace Stone_Application.Forms
         public static void requireAiInitialization()
         {
             if (s_instance == null || s_instance.IsDisposed) return;
+            s_instance.m_aiInitialized = false;
             s_instance.m_startButton.Enabled = false;
             s_instance.m_stopButton.Enabled = false;
             lock (Common.s_lockState) Common.s_currentState = Common.currentState.UN_INIT;
@@ -81,27 +116,27 @@ namespace Stone_Application.Forms
         {
             s_instance?.Invoke(new Action(() =>
             {
-                s_instance.m_startButton.Enabled = true;
-                s_instance.m_startButton.ForeColor = System.Drawing.SystemColors.ControlText;
-
-                s_instance.m_stopButton.Enabled = false;
-                s_instance.m_stopButton.ForeColor = System.Drawing.SystemColors.ActiveBorder;
-
+                s_instance.m_aiInitialized = true;
                 lock (Common.s_lockState)
                 {
                     Common.s_currentState = Common.currentState.READY;
                 }
+                s_instance.RefreshSessionControls();
             }));
         }
 
         private void startButtonClick(object sender, EventArgs e)
         {
+            RefreshSessionControls();
+            if (!m_startButton.Enabled) return;
             var ipc = Stone_Application.IPC.IPCServices.getInstance();
             try
             {
                 if (!AIHelper.IsLiveReady || Common.pythonProcess == null || Common.pythonProcess.HasExited)
                 { AIHelper.initializeAI(); AIHelper.warmUpAI(); }
                 _ = AIHelper.InitializeOfflineWorkerAsync();
+                if (Common.camera == null || !Common.camera.IsConnected)
+                    throw new InvalidOperationException("Reconnect the camera before starting a session.");
                 Common.StartPostgreSqlSession();
                 ipc.beginSession();
                 Common.videoRecorder.StartSession(ipc.SessionToken);
@@ -113,36 +148,50 @@ namespace Stone_Application.Forms
             {
                 ipc.deactivateSession();
                 try { Common.videoRecorder.StopSession(); } catch (Exception cleanup) { Console.WriteLine(cleanup.Message); }
+                lock (Common.s_lockState) Common.s_currentState = Common.currentState.READY;
+                RefreshSessionControls();
                 MessageBox.Show(this, "Could not start recording.\n\n" + ex.Message, "Session error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         private async void stopButtonClick(object sender, EventArgs e)
         {
-            disableStreaming();
+            await CompleteSessionAsync(false);
+        }
+
+        private async Task CompleteSessionAsync(bool cameraDisconnected)
+        {
+            if (IsCompletingSession) return;
             lock (Common.s_lockState)
             {
+                if (Common.s_currentState != Common.currentState.STREAMING) return;
                 Common.s_currentState = Common.currentState.READY;
             }
-
-            this.m_startButton.Enabled = false;
-            this.m_stopButton.Enabled = false;
+            IsCompletingSession = true;
+            m_mainForm.RefreshCameraControls();
             this.UseWaitCursor = true;
             var ipc = Stone_Application.IPC.IPCServices.getInstance();
             bool memorySafe = false;
             bool aiSettled = false;
             AIHelper.VideoInferenceResult result = null;
+            string settlementError = null;
             try
             {
-                await Task.Run(() =>
+                ipc.deactivateSession();
+                Common.videoRecorder.StopAccepting();
+                Task completion = Task.Run(() =>
                 {
-                    ipc.deactivateSession();
-                    Common.videoRecorder.StopAccepting();
                     string videoPath;
                     try
                     {
                         aiSettled = ipc.endSessionAndClear();
                         memorySafe = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        // An unsafe live worker blocks the next START, but must not
+                        // prevent analysis of the independently finalized recording.
+                        settlementError = ex.Message;
                     }
                     finally
                     {
@@ -168,8 +217,14 @@ namespace Stone_Application.Forms
                         measuredWeight4 = checked((float)result.AverageWeights[3])
                     });
                 });
+                // Start finalization before the modal alert: acknowledging the
+                // disconnect is not a prerequisite for saving the recording.
+                if (cameraDisconnected) ShowCameraDisconnectedMessage(true);
+                await completion;
                 this.m_mainForm.RefreshLogs();
-                string aiWarning = aiSettled ? "" : "\n\nLive AI timed out and was terminated. It will be restarted before the next session.";
+                string aiWarning = settlementError != null
+                    ? "\n\nLive AI could not be stopped safely. START remains disabled.\n" + settlementError
+                    : aiSettled ? "" : "\n\nLive AI timed out and was terminated. It will be restarted before the next session.";
                 MessageBox.Show(this, FormatVideoInferenceResult(result) + aiWarning,
                     "Video inference result", MessageBoxButtons.OK,
                     result.Status == "Complete" && aiSettled ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
@@ -182,8 +237,9 @@ namespace Stone_Application.Forms
             finally
             {
                 this.UseWaitCursor = false;
-                this.m_startButton.Enabled = memorySafe;
-                this.m_startButton.ForeColor = System.Drawing.SystemColors.ControlText;
+                m_memorySafe = memorySafe;
+                IsCompletingSession = false;
+                m_mainForm.RefreshCameraControls();
             }
         }
 

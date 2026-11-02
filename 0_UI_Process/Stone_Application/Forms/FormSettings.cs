@@ -19,6 +19,19 @@ namespace Stone_Application.Forms
     public partial class FormSettings : Form
     {
         private MainForm m_mainForm;
+        private bool m_initializingAi;
+
+        public void RefreshCameraControls()
+        {
+            bool connected = Common.camera != null && Common.camera.IsConnected;
+            m_buttonCamera.Enabled = !connected;
+            m_buttonCamera.ForeColor = m_buttonCamera.Enabled ? SystemColors.ControlText : SystemColors.ButtonShadow;
+            // Model warm-up uses the reference image, so it can run before
+            // connecting hardware. Camera readiness is enforced by START.
+            m_buttonAI.Enabled = !m_initializingAi &&
+                !m_mainForm.HasInitializedAi && !m_mainForm.IsCompletingSession;
+            m_buttonAI.ForeColor = m_buttonAI.Enabled ? SystemColors.ControlText : SystemColors.ButtonShadow;
+        }
         public FormSettings(MainForm p_mainForm)
         {
             InitializeComponent();
@@ -29,6 +42,7 @@ namespace Stone_Application.Forms
             this.ControlBox = false;
             this.ShowIcon = false;
             this.ShowInTaskbar = false;
+            RefreshCameraControls();
         }
 
 
@@ -69,11 +83,7 @@ namespace Stone_Application.Forms
                     this.m_buttonModbus.Enabled = false;
                     this.m_buttonModbus.ForeColor = System.Drawing.SystemColors.ButtonShadow;
 
-                    if (this.m_buttonCamera.Enabled == false)
-                    {
-                        this.m_buttonAI.Enabled = true;
-                        this.m_buttonAI.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
-                    }
+                    RefreshCameraControls();
                 }
                 catch (Exception ex)
                 {
@@ -94,17 +104,12 @@ namespace Stone_Application.Forms
 
         private void buttonCameraClick(object p_sender, EventArgs p_e)
         {
+            m_buttonCamera.Enabled = false;
             try
             {
                 Common.camera = BaslerCamera.getInstance();
+                m_mainForm.RefreshCameraControls();
                 MessageBox.Show(this, "Camera successfully initialized", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                this.m_buttonCamera.Enabled = false;
-                this.m_buttonCamera.ForeColor = System.Drawing.SystemColors.ButtonShadow;
-                if (this.m_buttonModbus.Enabled == false)
-                {
-                    this.m_buttonAI.Enabled = true;
-                    this.m_buttonAI.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
-                }
             }
             catch (Exception ex)
             {
@@ -113,10 +118,17 @@ namespace Stone_Application.Forms
                     "Could not initialize the Basler camera. Check the camera connection, power, and Pylon driver, then try again.\n\n" + ex.GetBaseException().Message,
                     "Camera initialization error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+            finally
+            {
+                m_mainForm.RefreshCameraControls();
+            }
         }
 
         private async void buttonAIClick(object p_sender, EventArgs p_e)
         {
+            RefreshCameraControls();
+            if (!m_buttonAI.Enabled) return;
+            m_initializingAi = true;
             this.m_buttonAI.Enabled = false;
             try
             {
@@ -137,10 +149,13 @@ namespace Stone_Application.Forms
             catch (Exception ex)
             {
                 FormHome.requireAiInitialization();
-                this.m_buttonAI.Enabled = true;
-                this.m_buttonAI.ForeColor = System.Drawing.SystemColors.ControlText;
                 MessageBox.Show(this, "AI initialization failed. Correct the problem and retry.\n\n" + ex.Message,
                     "AI initialization error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                m_initializingAi = false;
+                m_mainForm.RefreshCameraControls();
             }
         }
     }

@@ -11,22 +11,51 @@ namespace Stone_Application.CameraClass
         private static BaslerCamera s_instance;
         private Camera m_camera;
         private long m_lastCaptureToken;
+        private readonly object m_captureLock = new object();
+        private int m_connectionLost;
+        private int m_closing;
+        public static event Action<BaslerCamera> ConnectionLost;
+
+        public bool IsConnected
+        {
+            get
+            {
+                var camera = m_camera;
+                return Volatile.Read(ref m_connectionLost) == 0 &&
+                    Volatile.Read(ref m_closing) == 0 && camera != null && camera.IsConnected;
+            }
+        }
+
+        private void OnConnectionLost(object sender, EventArgs e)
+        {
+            ReportConnectionLost();
+        }
+
+        private void ReportConnectionLost()
+        {
+            // Pylon can call this inside its camera lock. Never wait for the UI,
+            // dispose the camera, or acquire application locks in this callback.
+            if (Volatile.Read(ref m_closing) == 0 && Interlocked.Exchange(ref m_connectionLost, 1) == 0)
+                ConnectionLost?.Invoke(this);
+        }
         private BaslerCamera() { ; }
 
         public static BaslerCamera getInstance()
         {
-            if (s_instance != null && s_instance.m_camera != null && s_instance.m_camera.IsOpen)
+            if (s_instance != null && s_instance.IsConnected)
                 return s_instance;
 
             lock (typeof(BaslerCamera))
             {
-                if (s_instance != null && s_instance.m_camera != null && s_instance.m_camera.IsOpen)
+                if (s_instance != null && s_instance.IsConnected)
                     return s_instance;
 
+                s_instance?.cameraClose();
                 var instance = new BaslerCamera();
                 try
                 {
                     instance.m_camera = new Camera();
+                    instance.m_camera.ConnectionLost += instance.OnConnectionLost;
                     instance.m_camera.Open();
                     instance.m_camera.Parameters[PLCamera.PixelFormat].SetValue(PLCamera.PixelFormat.BGR8);
                     instance.m_camera.Parameters[PLCamera.ExposureTime].SetValue(Config.EXPOSURE_TIME);
@@ -34,6 +63,8 @@ namespace Stone_Application.CameraClass
                     instance.m_camera.Parameters[PLCamera.AcquisitionMode].SetValue(PLCamera.AcquisitionMode.Continuous);
                     instance.m_camera.StreamGrabber.Start(GrabStrategy.LatestImages, GrabLoop.ProvidedByUser);
                     instance.m_camera.Parameters[PLCamera.AcquisitionStart].Execute();
+                    if (!instance.IsConnected)
+                        throw new InvalidOperationException("Camera connection was lost during initialization.");
 
                     s_instance = instance;
 
@@ -44,11 +75,7 @@ namespace Stone_Application.CameraClass
                 }
                 catch (Exception ex)
                 {
-                    if (instance.m_camera != null)
-                    {
-                        try { instance.m_camera.Dispose(); }
-                        catch { }
-                    }
+                    instance.cameraClose();
                     s_instance = null;
                     throw new InvalidOperationException("Could not initialize the Basler camera. Check that the camera is connected, powered, and available to the Pylon driver.", ex);
                 }
@@ -57,18 +84,34 @@ namespace Stone_Application.CameraClass
 
         public void cameraCapture(CancellationToken p_cancellationToken)
         {
+            // A reconnect must not dispose a camera while a grab owns its buffer.
+            lock (m_captureLock)
+            {
+                if (p_cancellationToken.IsCancellationRequested) return;
+                if (!IsConnected)
+                {
+                    ReportConnectionLost();
+                    return;
+                }
+                CaptureFrame(p_cancellationToken);
+            }
+        }
+
+        private void CaptureFrame(CancellationToken p_cancellationToken)
+        {
             var ipc = IPCServices.getInstance();
             long sessionToken = ipc.SessionToken;
             if (sessionToken == 0 || p_cancellationToken.IsCancellationRequested) return;
             IGrabResult result;
             try
             {
-                result = s_instance.m_camera.StreamGrabber.RetrieveResult(5000, TimeoutHandling.ThrowException);
+                result = m_camera.StreamGrabber.RetrieveResult(5000, TimeoutHandling.ThrowException);
             }
             catch (Exception ex)
             {
                 Common.videoRecorder.NoteCaptureFailure(sessionToken);
                 Console.WriteLine("[ERROR] [CAMERA] Could not capture " + ex.Message);
+                if (!p_cancellationToken.IsCancellationRequested) ReportConnectionLost();
                 return;
             }
 
@@ -126,19 +169,19 @@ namespace Stone_Application.CameraClass
 
         public void cameraClose()
         {
-            try
+            Interlocked.Exchange(ref m_closing, 1);
+            lock (m_captureLock)
             {
-                s_instance.m_camera.Parameters[PLCamera.AcquisitionStop].Execute();
-                s_instance.m_camera.Close();
-                s_instance.m_camera.Dispose();
-
-                if (Config.s_isDebugMode) {
-                    Console.WriteLine($"[INFO] [CAMERA] Camera is closed sucessully");
+                if (m_camera == null) return;
+                m_camera.ConnectionLost -= OnConnectionLost;
+                try { m_camera.Close(); }
+                catch (Exception ex) { Console.WriteLine("[WARN] [CAMERA] Close failed: " + ex.Message); }
+                finally
+                {
+                    try { m_camera.Dispose(); }
+                    catch (Exception ex) { Console.WriteLine("[WARN] [CAMERA] Dispose failed: " + ex.Message); }
+                    m_camera = null;
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[WARN] [CAMERA] Camera could not be Closed\nError: {ex.Message}");
             }
         }
     }
