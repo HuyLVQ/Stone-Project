@@ -50,6 +50,48 @@ def _feature_row(counts, areas, perimeters):
                         columns=pipeline.FEATURE_COLUMNS)
 
 
+def _visualize_weight_inference(result, original):
+    """Draw the weight-pipeline classifications using YOLOModel's overlay style."""
+    drawn = original.copy()
+    overlay = drawn.copy()
+    colors = {
+        "mi_sang": (255, 120, 0),
+        "1x2": (0, 220, 0),
+        "2x4": (0, 220, 255),
+        "4x6": (0, 80, 255),
+    }
+
+    if result.masks is not None:
+        for object_id, contour_xy in enumerate(result.masks.xy):
+            contour = np.asarray(contour_xy, dtype=np.float32)
+            dimensions = pipeline._get_contour_dimensions(
+                contour, pipeline.PIXEL2CM_WEIGHT)
+            if dimensions is None:
+                continue
+            rock = pipeline.classify_rock(*dimensions)
+            if rock not in colors:
+                continue
+
+            contour_int = np.asarray(contour, dtype=np.int32)
+            rect = cv2.minAreaRect(contour)
+            box = np.int32(cv2.boxPoints(rect))
+            cv2.fillPoly(overlay, [contour_int], colors[rock])
+            cv2.polylines(drawn, [box], isClosed=True, color=(0, 255, 0), thickness=2)
+
+            moments = cv2.moments(contour_int)
+            if moments["m00"]:
+                center_x = int(moments["m10"] / moments["m00"])
+                center_y = int(moments["m01"] / moments["m00"])
+            else:
+                center_x, center_y = int(contour[0][0]), int(contour[0][1])
+            cv2.putText(drawn, "ID:{} - {}".format(object_id, rock),
+                        (center_x - 20, center_y), cv2.FONT_HERSHEY_SIMPLEX,
+                        2.0, (255, 255, 255), 1)
+
+    cv2.addWeighted(overlay, 0.28, drawn, 0.72, 0, drawn)
+    return drawn
+
+
 def _accumulate(result, count_scale, weight_scale, counts, areas, perimeters):
     if result.masks is None:
         return
@@ -114,7 +156,7 @@ def analyze_recording(recording, model=None, capture_factory=cv2.VideoCapture, b
             try:
                 if isinstance(result, Exception):
                     raise result
-                rendered = result.plot()
+                rendered = _visualize_weight_inference(result, frame)
                 image_path = image_directory / "{}_part{:04d}_frame{:08d}.jpg".format(
                     recording_path.stem, segment_number, frame_index)
                 if not cv2.imwrite(str(image_path), rendered):

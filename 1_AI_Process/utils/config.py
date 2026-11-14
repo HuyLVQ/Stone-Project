@@ -26,7 +26,7 @@ READ_OFFSET = IMAGE_BUFFER_SIZE                  ## Region #2 retains its existi
 MEMORY_ALLOCATION = IMAGE_BUFFER_SIZE + 10_000_000
 MMF_TIMEOUT = 10_000_000
 
-RATIO_SCALE = 1/18.82
+RATIO_SCALE = 1/12.4
 TYPE_COLORS = {
                 "MiSang": (255, 120, 0),    
                 "1x2": (0, 220, 0),      
