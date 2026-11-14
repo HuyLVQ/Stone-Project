@@ -77,6 +77,9 @@ def analyze_recording(recording, model=None, capture_factory=cv2.VideoCapture, b
     if batch_size < 1:
         raise ValueError("Batch size must be positive")
     segments, dropped, trusted = _recording_segments(recording)
+    recording_path = Path(recording).resolve()
+    image_directory = recording_path.parent / "inference_images"
+    image_directory.mkdir(parents=True, exist_ok=True)
     model = model or YOLO(str(pipeline.YOLO_MODEL_PATH))
     counts = {rock: 0 for rock in pipeline.ROCK_TYPES}
     areas = {rock: 0.0 for rock in pipeline.ROCK_TYPES}
@@ -111,6 +114,11 @@ def analyze_recording(recording, model=None, capture_factory=cv2.VideoCapture, b
             try:
                 if isinstance(result, Exception):
                     raise result
+                rendered = result.plot()
+                image_path = image_directory / "{}_part{:04d}_frame{:08d}.jpg".format(
+                    recording_path.stem, segment_number, frame_index)
+                if not cv2.imwrite(str(image_path), rendered):
+                    raise RuntimeError("Could not save inference image: {}".format(image_path))
                 _accumulate(result, pipeline.PIXEL2CM_COUNT,
                             pipeline.PIXEL2CM_WEIGHT, counts, areas, perimeters)
                 processed += 1
@@ -119,7 +127,7 @@ def analyze_recording(recording, model=None, capture_factory=cv2.VideoCapture, b
                 print("[WARN] Skipped sampled frame {} in {}: {}".format(frame_index, path, exc),
                       file=sys.stderr)
 
-    for path, physical_expected in segments:
+    for segment_number, (path, physical_expected) in enumerate(segments, start=1):
         capture = capture_factory(str(path))
         if not capture.isOpened():
             capture.release()

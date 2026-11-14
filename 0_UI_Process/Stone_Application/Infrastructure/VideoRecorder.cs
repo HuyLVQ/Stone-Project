@@ -66,7 +66,10 @@ public sealed class VideoRecorder : IDisposable
         {
             if (m_worker != null) throw new InvalidOperationException("Previous recording has not been drained.");
             Directory.CreateDirectory(m_outputPath);
-            m_prefix = Path.Combine(m_outputPath, "session_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "_" + Guid.NewGuid().ToString("N"));
+            string recordingName = "session_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "_" + Guid.NewGuid().ToString("N");
+            string recordingDirectory = Path.Combine(m_outputPath, recordingName);
+            Directory.CreateDirectory(recordingDirectory);
+            m_prefix = Path.Combine(recordingDirectory, recordingName);
             m_manifest = new RecordingManifest { SessionToken = sessionToken };
             m_session = sessionToken;
             m_sessionClock.Reset();
