@@ -64,7 +64,7 @@ def _visualize_weight_inference(result, original):
     if result.masks is not None:
         for object_id, contour_xy in enumerate(result.masks.xy):
             contour = np.asarray(contour_xy, dtype=np.float32)
-            dimensions = pipeline._get_contour_dimensions(
+            dimensions = pipeline.get_contour_dimensions(
                 contour, pipeline.PIXEL2CM_WEIGHT)
             if dimensions is None:
                 continue
@@ -99,12 +99,12 @@ def _accumulate(result, count_scale, weight_scale, counts, areas, perimeters):
         contour = np.asarray(contour_xy, dtype=np.float32)
         if contour.ndim != 2 or len(contour) < 3 or not np.isfinite(contour).all():
             continue
-        dimensions = pipeline._get_contour_dimensions(contour, count_scale)
+        dimensions = pipeline.get_contour_dimensions(contour, count_scale)
         if dimensions is not None:
             rock = pipeline.classify_rock(*dimensions)
             if rock in counts:
                 counts[rock] += 1
-        dimensions = pipeline._get_contour_dimensions(contour, weight_scale)
+        dimensions = pipeline.get_contour_dimensions(contour, weight_scale)
         if dimensions is None:
             continue
         rock = pipeline.classify_rock(*dimensions)
