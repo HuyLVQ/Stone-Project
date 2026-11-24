@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -27,6 +28,8 @@ namespace Stone_Application.Networking.Iot
         private DeliveryMode m_mode = DeliveryMode.Stopped;
         private long m_sessionToken;
         private long m_sequence;
+        private long m_lastImagePublishTimestamp;
+        private static readonly long s_minimumImageIntervalTicks = Math.Max(1, Stopwatch.Frequency / 5);
 
         public static IotServer Instance { get { return s_instance.Value; } }
 
@@ -51,6 +54,7 @@ namespace Stone_Application.Networking.Iot
             {
                 m_sessionToken = sessionToken;
                 m_sequence = 0;
+                m_lastImagePublishTimestamp = 0;
                 m_mode = DeliveryMode.Images;
                 foreach (IotClientConnection client in m_clients.Values) client.ClearPendingImages();
             }
@@ -74,7 +78,14 @@ namespace Stone_Application.Networking.Iot
                     image.liveSessionToken != m_sessionToken)
                     return;
 
-                byte[] message = IotProtocol.Frame(IotProtocol.CreateImageEnvelope(image, ++m_sequence));
+                long now = Stopwatch.GetTimestamp();
+                if (m_lastImagePublishTimestamp != 0 &&
+                    now - m_lastImagePublishTimestamp < s_minimumImageIntervalTicks)
+                    return;
+
+                byte[] jpegImage = IotProtocol.CompressAnnotatedImage(image.recvImage);
+                byte[] message = IotProtocol.Frame(IotProtocol.CreateImageEnvelope(image, jpegImage, ++m_sequence));
+                m_lastImagePublishTimestamp = now;
                 foreach (IotClientConnection client in m_clients.Values) client.QueueImage(message);
             }
         }

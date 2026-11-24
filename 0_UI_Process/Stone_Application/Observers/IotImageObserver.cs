@@ -11,7 +11,8 @@ namespace Stone_Application.Observer
 
         public void Update(T image)
         {
-            IotServer.Instance.PublishImage(image);
+            try { IotServer.Instance.PublishImage(image); }
+            catch (System.Exception ex) { System.Console.WriteLine("[WARN] [IOT] Could not encode or publish image: " + ex.Message); }
         }
     }
 }

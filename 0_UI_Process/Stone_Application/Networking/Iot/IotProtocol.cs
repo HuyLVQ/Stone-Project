@@ -1,6 +1,9 @@
 using System;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using Stone_Application.Event;
 
@@ -12,9 +15,61 @@ namespace Stone_Application.Networking.Iot
         internal const int ClientTcpPort = 50002;
         internal const int MaxHandshakeBytes = 4096;
         internal const int MaxEnvelopeBytes = 16 * 1024 * 1024;
-        private const uint SchemaVersion = 1;
+        private const uint SchemaVersion = 2;
+        internal const long JpegQuality = 85;
 
-        internal static byte[] CreateImageEnvelope(IImage image, long sequence)
+        internal static byte[] CompressAnnotatedImage(byte[] bgrImage)
+        {
+            if (bgrImage == null || bgrImage.Length != Config.IMAGE_BYTE_COUNT)
+                throw new InvalidDataException("The annotated image has an unexpected byte length.");
+
+            using (Bitmap bitmap = new Bitmap(Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, PixelFormat.Format24bppRgb))
+            {
+                Rectangle bounds = new Rectangle(0, 0, Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT);
+                BitmapData bitmapData = bitmap.LockBits(bounds, ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
+                try
+                {
+                    int packedRowBytes = checked(Config.IMAGE_WIDTH * 3);
+                    if (bitmapData.Stride == packedRowBytes)
+                    {
+                        Marshal.Copy(bgrImage, 0, bitmapData.Scan0, bgrImage.Length);
+                    }
+                    else
+                    {
+                        for (int row = 0; row < Config.IMAGE_HEIGHT; row++)
+                        {
+                            IntPtr rowAddress = IntPtr.Add(bitmapData.Scan0, checked(row * bitmapData.Stride));
+                            Marshal.Copy(bgrImage, checked(row * packedRowBytes), rowAddress, packedRowBytes);
+                        }
+                    }
+                }
+                finally
+                {
+                    bitmap.UnlockBits(bitmapData);
+                }
+
+                ImageCodecInfo jpegCodec = null;
+                foreach (ImageCodecInfo codec in ImageCodecInfo.GetImageEncoders())
+                {
+                    if (String.Equals(codec.MimeType, "image/jpeg", StringComparison.OrdinalIgnoreCase))
+                    {
+                        jpegCodec = codec;
+                        break;
+                    }
+                }
+                if (jpegCodec == null) throw new InvalidOperationException("The JPEG image encoder is unavailable.");
+
+                using (var output = new MemoryStream())
+                using (var encoderParameters = new EncoderParameters(1))
+                {
+                    encoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, JpegQuality);
+                    bitmap.Save(output, jpegCodec, encoderParameters);
+                    return output.ToArray();
+                }
+            }
+        }
+
+        internal static byte[] CreateImageEnvelope(IImage image, byte[] jpegImage, long sequence)
         {
             var frame = new ProtoWriter();
             frame.UInt32(1, SchemaVersion);
@@ -25,8 +80,8 @@ namespace Stone_Application.Networking.Iot
             frame.Int64(4, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             frame.UInt32(5, checked((uint)Config.IMAGE_WIDTH));
             frame.UInt32(6, checked((uint)Config.IMAGE_HEIGHT));
-            frame.String(7, "BGR8_PACKED");
-            frame.Bytes(8, image.recvImage);
+            frame.String(7, "JPEG");
+            frame.Bytes(8, jpegImage);
 
             var envelope = new ProtoWriter();
             envelope.UInt32(1, SchemaVersion);
