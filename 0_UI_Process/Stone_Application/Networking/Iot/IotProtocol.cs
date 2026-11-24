@@ -9,13 +9,16 @@ using Stone_Application.Event;
 
 namespace Stone_Application.Networking.Iot
 {
+    internal enum IotImageEncoding { Jpeg, H264 }
+
     internal static class IotProtocol
     {
         internal const int HandshakePort = 50001;
         internal const int ClientTcpPort = 50002;
         internal const int MaxHandshakeBytes = 4096;
         internal const int MaxEnvelopeBytes = 16 * 1024 * 1024;
-        private const uint SchemaVersion = 2;
+        internal const uint JpegSchemaVersion = 2;
+        internal const uint H264SchemaVersion = 3;
         internal const long JpegQuality = 85;
 
         internal static byte[] CompressAnnotatedImage(byte[] bgrImage)
@@ -72,7 +75,7 @@ namespace Stone_Application.Networking.Iot
         internal static byte[] CreateImageEnvelope(IImage image, byte[] jpegImage, long sequence)
         {
             var frame = new ProtoWriter();
-            frame.UInt32(1, SchemaVersion);
+            frame.UInt32(1, JpegSchemaVersion);
             frame.String(2, image.liveSessionToken.ToString(System.Globalization.CultureInfo.InvariantCulture));
             frame.UInt64(3, checked((ulong)sequence));
             // IImage carries no camera timestamp, so record the server-side
@@ -84,19 +87,20 @@ namespace Stone_Application.Networking.Iot
             frame.Bytes(8, jpegImage);
 
             var envelope = new ProtoWriter();
-            envelope.UInt32(1, SchemaVersion);
+            envelope.UInt32(1, JpegSchemaVersion);
             envelope.Message(10, frame.ToArray());
             return envelope.ToArray();
         }
 
-        internal static byte[] CreateResultEnvelope(AIHelper.VideoInferenceResult result, long sessionToken, long sequence)
+        internal static byte[] CreateResultEnvelope(AIHelper.VideoInferenceResult result, long sessionToken, long sequence, IotImageEncoding imageEncoding)
         {
+            uint schemaVersion = imageEncoding == IotImageEncoding.H264 ? H264SchemaVersion : JpegSchemaVersion;
             double[] counts = { result.MiSang, result.OneByTwo, result.TwoByFour, result.FourBySix };
             string[] ids = { "MiSang", "1x2", "2x4", "4x6" };
             double total = counts[0] + counts[1] + counts[2] + counts[3];
 
             var resultMessage = new ProtoWriter();
-            resultMessage.UInt32(1, SchemaVersion);
+            resultMessage.UInt32(1, schemaVersion);
             resultMessage.String(2, sessionToken.ToString(System.Globalization.CultureInfo.InvariantCulture));
             resultMessage.UInt64(3, checked((ulong)sequence));
             resultMessage.Int64(4, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
@@ -118,7 +122,7 @@ namespace Stone_Application.Networking.Iot
             resultMessage.String(7, "kg");
 
             var envelope = new ProtoWriter();
-            envelope.UInt32(1, SchemaVersion);
+            envelope.UInt32(1, schemaVersion);
             envelope.Message(11, resultMessage.ToArray());
             return envelope.ToArray();
         }
@@ -138,9 +142,10 @@ namespace Stone_Application.Networking.Iot
             return framed;
         }
 
-        internal static bool TryParseHandshake(string message, IPAddress observedAddress, out string clientId)
+        internal static bool TryParseHandshake(string message, IPAddress observedAddress, out string clientId, out IotImageEncoding requestedEncoding)
         {
             clientId = null;
+            requestedEncoding = IotImageEncoding.Jpeg;
             const string prefix = "SEARCHING FOR SERVER - my current id is:";
             if (String.IsNullOrWhiteSpace(message) || !message.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 return false;
@@ -165,10 +170,38 @@ namespace Stone_Application.Networking.Iot
                         !NormalizeAddress(declared).Equals(NormalizeAddress(observedAddress)))
                         return false;
                 }
+                const string encodingPrefix = "image encoding is:";
+                if (declaration.StartsWith(encodingPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    string encoding = declaration.Substring(encodingPrefix.Length).Trim();
+                    if (String.Equals(encoding, "h264", StringComparison.OrdinalIgnoreCase))
+                        requestedEncoding = IotImageEncoding.H264;
+                    else if (String.Equals(encoding, "jpeg", StringComparison.OrdinalIgnoreCase))
+                        requestedEncoding = IotImageEncoding.Jpeg;
+                    else
+                        return false;
+                }
             }
 
             clientId = id;
             return true;
+        }
+
+        internal static byte[] CreateH264ChunkEnvelope(byte[] transportChunk, long sessionToken, long sequence)
+        {
+            var chunk = new ProtoWriter();
+            chunk.UInt32(1, H264SchemaVersion);
+            chunk.String(2, sessionToken.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            chunk.UInt64(3, checked((ulong)sequence));
+            chunk.Int64(4, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            chunk.String(5, "MPEG_TS");
+            chunk.String(6, "H264");
+            chunk.Bytes(7, transportChunk);
+
+            var envelope = new ProtoWriter();
+            envelope.UInt32(1, H264SchemaVersion);
+            envelope.Message(12, chunk.ToArray());
+            return envelope.ToArray();
         }
 
         internal static IPAddress NormalizeAddress(IPAddress address)

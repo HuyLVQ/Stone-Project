@@ -27,16 +27,19 @@ namespace Stone_Application.Networking.Iot
         private long m_lastSeenUtcTicks;
         private volatile bool m_disposed;
 
-        internal IotClientConnection(string clientId, string address)
+        internal IotClientConnection(string clientId, string address, IotImageEncoding imageEncoding)
         {
             m_clientId = clientId;
             m_address = address;
+            ImageEncoding = imageEncoding;
             RefreshLease();
             m_worker = Task.Run((Action)SendLoop);
         }
 
         internal string ClientId { get { return m_clientId; } }
         internal string Address { get { return m_address; } }
+        internal IotImageEncoding ImageEncoding { get; private set; }
+        internal bool UsesH264 { get { return ImageEncoding == IotImageEncoding.H264; } }
 
         internal void RefreshLease()
         {
@@ -50,6 +53,11 @@ namespace Stone_Application.Networking.Iot
         }
 
         internal void QueueImage(byte[] framedMessage)
+        {
+            QueueLatest(new OutboundFrame { Bytes = framedMessage, IsFinalResult = false });
+        }
+
+        internal void QueueVideoChunk(byte[] framedMessage)
         {
             QueueLatest(new OutboundFrame { Bytes = framedMessage, IsFinalResult = false });
         }
