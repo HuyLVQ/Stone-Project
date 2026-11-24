@@ -66,6 +66,7 @@ namespace Stone_Application.Event
 
         public void notifyImage(IImage p_image)
         {
+            if (!m_ipcService.IsCurrentSession(p_image.liveSessionToken)) return;
             foreach (var observer in this.m_imageObservers)
             {
                 observer.Update(p_image);

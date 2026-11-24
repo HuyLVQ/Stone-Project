@@ -81,6 +81,7 @@ namespace Stone_Application.Infrastructure
                 aiProcessEvent.attachInformationObserver(dbObserver);
                 aiProcessEvent.attachImageObserver(uiImageObserver);
                 aiProcessEvent.attachInformationObserver(uiInformationObserver);
+                aiProcessEvent.attachImageObserver(IotImageObserver<Event.IImage>.Instance);
 
                 CancellationToken token = s_cancellationSource.Token;
 

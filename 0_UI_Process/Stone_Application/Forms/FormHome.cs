@@ -142,6 +142,7 @@ namespace Stone_Application.Forms
                 Common.videoRecorder.StartSession(ipc.SessionToken);
                 Common.s_stopWatchMain.Restart();
                 enableStreaming();
+                Stone_Application.Networking.Iot.IotServer.Instance.StartImageMode(ipc.SessionToken);
                 lock (Common.s_lockState) Common.s_currentState = Common.currentState.STREAMING;
             }
             catch (Exception ex)
@@ -167,10 +168,12 @@ namespace Stone_Application.Forms
                 if (Common.s_currentState != Common.currentState.STREAMING) return;
                 Common.s_currentState = Common.currentState.READY;
             }
+            var ipc = Stone_Application.IPC.IPCServices.getInstance();
+            long iotSessionToken = ipc.SessionToken;
+            Stone_Application.Networking.Iot.IotServer.Instance.StopImageMode();
             IsCompletingSession = true;
             m_mainForm.RefreshCameraControls();
             this.UseWaitCursor = true;
-            var ipc = Stone_Application.IPC.IPCServices.getInstance();
             bool memorySafe = false;
             bool aiSettled = false;
             AIHelper.VideoInferenceResult result = null;
@@ -221,6 +224,7 @@ namespace Stone_Application.Forms
                 // disconnect is not a prerequisite for saving the recording.
                 if (cameraDisconnected) ShowCameraDisconnectedMessage(true);
                 await completion;
+                Stone_Application.Networking.Iot.IotServer.Instance.PublishFinalResult(result, iotSessionToken);
                 this.m_mainForm.RefreshLogs();
                 string aiWarning = settlementError != null
                     ? "\n\nLive AI could not be stopped safely. START remains disabled.\n" + settlementError

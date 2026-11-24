@@ -27,6 +27,8 @@ namespace Stone_Application
         {
             InitializeComponent();
             ConfigureWindow();
+            try { Networking.Iot.IotServer.Instance.Start(); }
+            catch (Exception ex) { Console.WriteLine("[ERROR] [IOT] Could not start handshake listener: " + ex.Message); }
 
             this.m_panelLoad.Controls.Clear();
 
@@ -173,6 +175,7 @@ namespace Stone_Application
             this.m_cleanupStarted = true;
             CameraClass.BaslerCamera.ConnectionLost -= OnCameraConnectionLost;
 
+            RunCleanupAction("IoT networking", Networking.Iot.IotServer.Instance.Stop);
             lock (Common.s_lockState) Common.s_currentState = Common.currentState.READY;
             RunCleanupAction("session dispatch", () => Stone_Application.IPC.IPCServices.getInstance().deactivateSession());
             Common.videoRecorder.StopAccepting();
