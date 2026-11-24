@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -20,6 +22,7 @@ namespace Stone_Application.Networking.Iot
         private readonly object m_lifecycleLock = new object();
         private readonly object m_publishLock = new object();
         private readonly object m_registryLock = new object();
+        private readonly object m_encoderLock = new object();
         private static readonly TimeSpan s_clientLease = TimeSpan.FromSeconds(30);
         private UdpClient m_listener;
         private CancellationTokenSource m_stop;
@@ -30,6 +33,9 @@ namespace Stone_Application.Networking.Iot
         private long m_sequence;
         private long m_lastImagePublishTimestamp;
         private static readonly long s_minimumImageIntervalTicks = Math.Max(1, Stopwatch.Frequency / 5);
+        private string m_ffmpegPath;
+        private FfmpegH264Encoder m_h264Encoder;
+        private bool m_h264EncoderAttempted;
 
         public static IotServer Instance { get { return s_instance.Value; } }
 
@@ -41,6 +47,7 @@ namespace Stone_Application.Networking.Iot
             {
                 if (m_listener != null) return;
                 m_stop = new CancellationTokenSource();
+                m_ffmpegPath = FindFfmpegExecutable();
                 m_listener = new UdpClient(new IPEndPoint(IPAddress.Any, IotProtocol.HandshakePort));
                 m_listenerTask = Task.Run(() => ListenLoop(m_stop.Token));
                 m_expirationTask = Task.Run(() => ExpireClientsLoop(m_stop.Token));
@@ -72,6 +79,9 @@ namespace Stone_Application.Networking.Iot
 
         internal void PublishImage(IImage image)
         {
+            IotClientConnection[] jpegClients;
+            IotClientConnection[] h264Clients;
+            FfmpegH264Encoder h264Encoder;
             lock (m_publishLock)
             {
                 if (m_mode != DeliveryMode.Images || image == null || image.recvImage == null ||
@@ -83,10 +93,34 @@ namespace Stone_Application.Networking.Iot
                     now - m_lastImagePublishTimestamp < s_minimumImageIntervalTicks)
                     return;
 
-                byte[] jpegImage = IotProtocol.CompressAnnotatedImage(image.recvImage);
-                byte[] message = IotProtocol.Frame(IotProtocol.CreateImageEnvelope(image, jpegImage, ++m_sequence));
+                jpegClients = m_clients.Values.Where(client => !client.UsesH264).ToArray();
+                h264Clients = m_clients.Values.Where(client => client.UsesH264).ToArray();
+                if (jpegClients.Length == 0 && h264Clients.Length == 0) return;
                 m_lastImagePublishTimestamp = now;
-                foreach (IotClientConnection client in m_clients.Values) client.QueueImage(message);
+                h264Encoder = m_h264Encoder;
+            }
+
+            if (jpegClients.Length > 0)
+            {
+                try
+                {
+                    byte[] jpegImage = IotProtocol.CompressAnnotatedImage(image.recvImage);
+                    lock (m_publishLock)
+                    {
+                        if (m_mode == DeliveryMode.Images && image.liveSessionToken == m_sessionToken)
+                        {
+                            byte[] message = IotProtocol.Frame(IotProtocol.CreateImageEnvelope(image, jpegImage, ++m_sequence));
+                            foreach (IotClientConnection client in jpegClients) client.QueueImage(message);
+                        }
+                    }
+                }
+                catch (Exception ex) { Console.WriteLine("[WARN] [IOT] JPEG image delivery failed: " + ex.Message); }
+            }
+
+            if (h264Clients.Length > 0 && h264Encoder != null)
+            {
+                try { h264Encoder.WriteFrame(image.recvImage); }
+                catch (Exception ex) { Console.WriteLine("[WARN] [IOT] H.264 frame encoding failed: " + ex.Message); }
             }
         }
 
@@ -96,8 +130,13 @@ namespace Stone_Application.Networking.Iot
             lock (m_publishLock)
             {
                 if (m_mode != DeliveryMode.ResultPending || sessionToken != m_sessionToken) return;
-                byte[] message = IotProtocol.Frame(IotProtocol.CreateResultEnvelope(result, sessionToken, ++m_sequence));
-                foreach (IotClientConnection client in m_clients.Values) client.QueueResult(message);
+                long resultSequence = ++m_sequence;
+                foreach (IotClientConnection client in m_clients.Values)
+                {
+                    byte[] message = IotProtocol.Frame(IotProtocol.CreateResultEnvelope(
+                        result, sessionToken, resultSequence, client.ImageEncoding));
+                    client.QueueResult(message);
+                }
             }
         }
 
@@ -115,11 +154,14 @@ namespace Stone_Application.Networking.Iot
                 if (packet.Buffer.Length == 0 || packet.Buffer.Length > IotProtocol.MaxHandshakeBytes) continue;
                 string message = Encoding.UTF8.GetString(packet.Buffer).Trim('\0', '\r', '\n', ' ');
                 string clientId;
+                IotImageEncoding requestedEncoding;
                 IPAddress address = IotProtocol.NormalizeAddress(packet.RemoteEndPoint.Address);
-                if (!IotProtocol.TryParseHandshake(message, address, out clientId)) continue;
+                if (!IotProtocol.TryParseHandshake(message, address, out clientId, out requestedEncoding)) continue;
 
-                RegisterClient(clientId, address);
-                byte[] response = Encoding.UTF8.GetBytes("SERVER CONFIRMED - client id: " + clientId + "; tcp port: " + IotProtocol.ClientTcpPort);
+                IotImageEncoding negotiatedEncoding = RegisterClient(clientId, address, requestedEncoding);
+                string encodingName = negotiatedEncoding == IotImageEncoding.H264 ? "H264_MPEG_TS" : "JPEG";
+                byte[] response = Encoding.UTF8.GetBytes("SERVER CONFIRMED - client id: " + clientId +
+                    "; tcp port: " + IotProtocol.ClientTcpPort + "; image encoding: " + encodingName);
                 try { await listener.SendAsync(response, response.Length, packet.RemoteEndPoint).ConfigureAwait(false); }
                 catch (ObjectDisposedException) { break; }
                 catch (SocketException ex) { Console.WriteLine("[WARN] [IOT] Handshake confirmation failed: " + ex.Message); }
@@ -154,32 +196,96 @@ namespace Stone_Application.Networking.Iot
             catch (OperationCanceledException) { }
         }
 
-        private void RegisterClient(string clientId, IPAddress address)
+        private IotImageEncoding RegisterClient(string clientId, IPAddress address, IotImageEncoding requestedEncoding)
         {
             string addressText = address.ToString();
+            IotImageEncoding negotiatedEncoding = requestedEncoding == IotImageEncoding.H264 && EnsureH264Encoder()
+                ? IotImageEncoding.H264
+                : IotImageEncoding.Jpeg;
+
             lock (m_registryLock)
             {
                 IotClientConnection existing;
                 if (m_clients.TryGetValue(clientId, out existing))
                 {
-                    if (String.Equals(existing.Address, addressText, StringComparison.OrdinalIgnoreCase))
+                    if (String.Equals(existing.Address, addressText, StringComparison.OrdinalIgnoreCase) &&
+                        existing.ImageEncoding == negotiatedEncoding)
                     {
                         existing.RefreshLease();
                         Console.WriteLine("[INFO] [IOT] Refreshed client " + clientId + " at " + addressText + ".");
-                        return;
+                        return negotiatedEncoding;
                     }
 
                     IotClientConnection removed;
                     if (m_clients.TryRemove(clientId, out removed)) removed.Dispose();
                 }
 
-                m_clients[clientId] = new IotClientConnection(clientId, addressText);
+                m_clients[clientId] = new IotClientConnection(clientId, addressText, negotiatedEncoding);
             }
-            Console.WriteLine("[INFO] [IOT] Registered client " + clientId + " at " + addressText + ".");
+            Console.WriteLine("[INFO] [IOT] Registered client " + clientId + " at " + addressText + " using " + encodingName(negotiatedEncoding) + ".");
+            return negotiatedEncoding;
+        }
+
+        private static string encodingName(IotImageEncoding encoding)
+        {
+            return encoding == IotImageEncoding.H264 ? "H.264 over MPEG-TS" : "JPEG";
+        }
+
+        private bool EnsureH264Encoder()
+        {
+            lock (m_encoderLock)
+            {
+                if (m_h264Encoder != null) return true;
+                if (m_h264EncoderAttempted || String.IsNullOrWhiteSpace(m_ffmpegPath)) return false;
+                m_h264EncoderAttempted = true;
+                try
+                {
+                    m_h264Encoder = FfmpegH264Encoder.Start(m_ffmpegPath, PublishH264Chunk);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[WARN] [IOT] H.264 is unavailable; this client will use JPEG: " + ex.Message);
+                    return false;
+                }
+            }
+        }
+
+        private void PublishH264Chunk(byte[] transportChunk)
+        {
+            lock (m_publishLock)
+            {
+                if (m_mode != DeliveryMode.Images) return;
+                byte[] envelope = IotProtocol.CreateH264ChunkEnvelope(transportChunk, m_sessionToken, ++m_sequence);
+                byte[] message = IotProtocol.Frame(envelope);
+                foreach (IotClientConnection client in m_clients.Values)
+                {
+                    if (client.UsesH264) client.QueueVideoChunk(message);
+                }
+            }
+        }
+
+        private static string FindFfmpegExecutable()
+        {
+            string configuredPath = Environment.GetEnvironmentVariable("STONE_FFMPEG_PATH");
+            if (!String.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath)) return configuredPath;
+
+            string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg.exe");
+            if (File.Exists(localPath)) return localPath;
+
+            string pathEnvironment = Environment.GetEnvironmentVariable("PATH") ?? String.Empty;
+            foreach (string directory in pathEnvironment.Split(Path.PathSeparator))
+            {
+                if (String.IsNullOrWhiteSpace(directory)) continue;
+                string candidate = Path.Combine(directory.Trim(), "ffmpeg.exe");
+                if (File.Exists(candidate)) return candidate;
+            }
+            return null;
         }
 
         public void Stop()
         {
+            lock (m_publishLock) m_mode = DeliveryMode.Stopped;
             lock (m_lifecycleLock)
             {
                 if (m_listener == null) return;
@@ -199,7 +305,13 @@ namespace Stone_Application.Networking.Iot
                 m_expirationTask = null;
             }
 
-            lock (m_publishLock) m_mode = DeliveryMode.Stopped;
+            lock (m_encoderLock)
+            {
+                m_h264Encoder?.Dispose();
+                m_h264Encoder = null;
+                m_h264EncoderAttempted = false;
+                m_ffmpegPath = null;
+            }
         }
 
         public void Dispose() { Stop(); }

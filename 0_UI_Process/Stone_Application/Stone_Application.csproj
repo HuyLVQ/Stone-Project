@@ -225,6 +225,7 @@
       <DependentUpon>MainForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Networking\Iot\IotClientConnection.cs" />
+    <Compile Include="Networking\Iot\FfmpegH264Encoder.cs" />
     <Compile Include="Networking\Iot\IotProtocol.cs" />
     <Compile Include="Networking\Iot\IotServer.cs" />
     <Compile Include="Observers\IotImageObserver.cs" />

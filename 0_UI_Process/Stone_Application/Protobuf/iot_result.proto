@@ -31,5 +31,6 @@ message IotEnvelope {
   oneof payload {
     ImageFrame image = 10;
     InferenceResult result = 11;
+    H264TransportChunk video_chunk = 12;
   }
 }

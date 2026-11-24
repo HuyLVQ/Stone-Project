@@ -16,3 +16,15 @@ message ImageFrame {
   string encoding = 7; // "JPEG"
   bytes jpeg_image = 8;
 }
+
+// MPEG-TS bytes contain an H.264 video stream. Chunks are ordered by
+// sequence_number and must be concatenated before passing them to a decoder.
+message H264TransportChunk {
+  uint32 schema_version = 1;
+  string session_id = 2;
+  uint64 sequence_number = 3;
+  int64 produced_at_unix_ms = 4;
+  string container = 5; // "MPEG_TS"
+  string codec = 6;     // "H264"
+  bytes data = 7;
+}
