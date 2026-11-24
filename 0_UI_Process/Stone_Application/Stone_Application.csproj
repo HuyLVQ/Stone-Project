@@ -224,6 +224,10 @@
     <Compile Include="MainForm.Designer.cs">
       <DependentUpon>MainForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="Networking\Iot\IotClientConnection.cs" />
+    <Compile Include="Networking\Iot\IotProtocol.cs" />
+    <Compile Include="Networking\Iot\IotServer.cs" />
+    <Compile Include="Observers\IotImageObserver.cs" />
     <Compile Include="Observers\UIImageObserver.cs" />
     <Compile Include="Observers\DBObserver.cs" />
     <Compile Include="Observers\IEventObserver.cs" />
@@ -261,6 +265,8 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="packages.config" />
+    <None Include="Protobuf\iot_image.proto" />
+    <None Include="Protobuf\iot_result.proto" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>

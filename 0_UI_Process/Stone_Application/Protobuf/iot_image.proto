@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package stone.iot.v1;
+
+option csharp_namespace = "Stone_Application.Protobuf.Iot.V1";
+
+// Image data is the AI-annotated frame received by IImage.recvImage.
+// Pixel bytes are tightly packed BGR8 (three bytes per pixel, no row padding).
+message ImageFrame {
+  uint32 schema_version = 1;
+  string session_id = 2;
+  uint64 sequence_number = 3;
+  int64 produced_at_unix_ms = 4;
+  uint32 image_width = 5;
+  uint32 image_height = 6;
+  string pixel_format = 7; // "BGR8_PACKED"
+  bytes annotated_image = 8;
+}

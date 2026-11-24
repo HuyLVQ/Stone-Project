@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package stone.iot.v1;
+
+option csharp_namespace = "Stone_Application.Protobuf.Iot.V1";
+
+import "iot_image.proto";
+
+message RockPercentage {
+  // Stable identifiers: "MiSang", "1x2", "2x4", and "4x6".
+  string rock_type_id = 1;
+  // Percentage on the 0.00-100.00 scale, rounded to two decimal places.
+  double percentage = 2;
+}
+
+message InferenceResult {
+  uint32 schema_version = 1;
+  string session_id = 2;
+  uint64 sequence_number = 3;
+  int64 finalized_at_unix_ms = 4;
+  // Exactly four entries, one for each documented rock_type_id.
+  repeated RockPercentage rock_percentages = 5;
+  double accumulated_weight = 6;
+  string weight_unit = 7; // "kg"
+}
+
+// Each TCP record contains one serialized IotEnvelope, prefixed by a
+// four-byte unsigned big-endian payload length.
+message IotEnvelope {
+  uint32 schema_version = 1;
+  oneof payload {
+    ImageFrame image = 10;
+    InferenceResult result = 11;
+  }
+}
