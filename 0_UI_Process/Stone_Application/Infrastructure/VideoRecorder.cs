@@ -32,7 +32,7 @@ public sealed class VideoRecorder : IDisposable
         public long FailedFrames { get; set; }
         public long DurationMilliseconds { get; set; }
         public double PlaybackFramesPerSecond { get; set; }
-        // Camera pixel format fed to the encoder (for example BayerRG8). Readers may ignore it.
+        // Camera pixel format fed to the encoder (BGR8packed or for example BayerRG8). Readers may ignore it.
         public string SourcePixelFormat { get; set; }
         public string Error { get; set; }
     }
@@ -76,11 +76,11 @@ public sealed class VideoRecorder : IDisposable
     // @param:
     //      * sessionToken: Immutable identity assigned to this recording session
     //      * playbackFramesPerSecond: Frame rate used to encode the session video
-    //      * sourcePixelType: Raw camera pixel type of recorded frames (8-bit Bayer)
+    //      * sourcePixelType: Camera pixel type of recorded frames (BGR8packed or 8-bit Bayer)
     // @details:
     //      Creates a unique session directory and manifest, starts the writer, waits for its first segment
     //      to open, and only then accepts frames. A previous session must be fully finalized first.
-    //      Pylon converts each raw frame to the MP4's YUV420p format on the writer thread.
+    //      Pylon converts each frame to the MP4's YUV420p format on the writer thread.
     public void StartSession(long sessionToken, double playbackFramesPerSecond, PixelType sourcePixelType)
     {
         lock (m_stopLock)
@@ -137,7 +137,7 @@ public sealed class VideoRecorder : IDisposable
     // @brief: Offer an owned camera frame to the active recording queue
     // @param:
     //      * sessionToken: Identity of the session that captured the frame
-    //      * pixels: Pooled frame buffer containing packed 8-bit Bayer image data
+    //      * pixels: Pooled frame buffer containing packed image data in the configured camera format
     //      * captureTimestamp: Stopwatch timestamp captured when the camera frame was retrieved
     // @return: True if the frame was accepted by the recorder queue
     // @details: The recorder adds its own buffer reference for accepted frames and releases it after writing.
@@ -334,7 +334,7 @@ public sealed class VideoRecorder : IDisposable
             OpenSegment();
         }
 
-        // Use the grab's own Bayer type; Pylon converts it to YUV420p before encoding.
+        // Use the grab's own pixel type; Pylon converts it to YUV420p before encoding.
         m_videoWriter.Write(frame.Pixels.Buffer, frame.Pixels.PixelType,
             Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, 0, ImageOrientation.TopDown);
         m_captureOffsets.Add(frame.CaptureOffsetMicroseconds);

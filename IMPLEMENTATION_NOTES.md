@@ -11,7 +11,7 @@
 
 ## Shared-memory protocol
 
-The camera streams 8-bit Bayer frames (1920 x 1200 x 1 byte). Frames selected for live inference are converted to BGR8 before publication, so each shared-memory slot holds 1920 x 1200 x 3 bytes, or 6,912,000 bytes per frame.
+By default the camera streams 8-bit Bayer frames (1920 x 1200 x 1 byte); `Config.CAMERA_PIXEL_FORMAT = CameraPixelFormat.Bgr8` restores legacy BGR8 capture, which skips the host conversion. Frames selected for live inference are converted to BGR8 before publication, so each shared-memory slot holds 1920 x 1200 x 3 bytes, or 6,912,000 bytes per frame.
 
 Region #1 begins at offset `0` and contains:
 

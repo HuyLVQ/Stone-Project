@@ -37,11 +37,12 @@ namespace Stone_Application.IPC
         public bool IsCurrentSession(long token) { lock (m_ringLock) return m_sessionActive && token == m_sessionToken; }
         private readonly ManualResetEventSlim m_noInferenceInFlight = new ManualResetEventSlim(true);
         private readonly BlockingCollection<CaptureFrame> m_captureQueue = new BlockingCollection<CaptureFrame>(Config.IPC_CAPTURE_QUEUE_CAPACITY);
-        // Raw Bayer frames selected for live inference are converted to BGR8 here, off the camera thread.
+        // In Bayer8 mode, frames selected for live inference are converted to BGR8 here, off the camera thread.
         // PixelDataConverter is not thread-safe, so conversion and its scratch buffer share one lock.
+        // Both are created on first use, so Bgr8 mode never allocates them.
         private readonly object m_convertLock = new object();
         private PixelDataConverter m_bgrConverter;
-        private readonly byte[] m_bgrFrame = new byte[Config.IMAGE_BYTE_COUNT];
+        private byte[] m_bgrFrame;
 
         private IPCServices() : this("", () => AIHelper.IsLiveReady && Common.pythonProcess != null && !Common.pythonProcess.HasExited,
             StopLiveAi, Config.AI_STOP_TIMEOUT_MS) { }
@@ -235,12 +236,13 @@ namespace Stone_Application.IPC
                 return m_sessionActive;
         }
 
-        // @brief: Convert a raw Bayer camera frame to BGR8 and publish it to the next free ring slot
+        // @brief: Publish a camera frame to the next free ring slot, converting it to BGR8 when needed
         // @param:
-        //      * p_image: Pooled raw frame; its PixelType names the Bayer layout
+        //      * p_image: Pooled camera frame; its PixelType is BGR8packed or names the Bayer layout
         //      * sessionToken: Session that captured the frame
         // @return: True if the frame was written to shared memory
-        // @details: Conversion runs before the ring lock is taken, so the lock still covers only a memory copy.
+        // @details: BGR8 frames are published as-is. Bayer conversion runs before the ring lock is taken,
+        //      so the lock still covers only a memory copy.
         public bool captureFrame(PooledFrameBuffer p_image, long sessionToken)
         {
             if (p_image == null || p_image.Length != Config.RAW_FRAME_BYTE_COUNT)
@@ -248,10 +250,16 @@ namespace Stone_Application.IPC
             if (!IsCurrentSession(sessionToken))
                 return false;
 
+            if (p_image.PixelType == PixelType.BGR8packed)
+                return publishBgrFrame(p_image.Buffer, sessionToken);
+
             lock (m_convertLock)
             {
                 if (m_bgrConverter == null)
+                {
                     m_bgrConverter = new PixelDataConverter { OutputPixelFormat = PixelType.BGR8packed };
+                    m_bgrFrame = new byte[Config.IMAGE_BYTE_COUNT];
+                }
                 m_bgrConverter.Convert(m_bgrFrame, p_image.Buffer, p_image.PixelType,
                     Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, 0, ImageOrientation.TopDown);
                 return publishBgrFrame(m_bgrFrame, sessionToken);

@@ -5,6 +5,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
+// Camera pixel formats selectable through Config.CAMERA_PIXEL_FORMAT
+public enum CameraPixelFormat
+{
+    Bgr8,
+    Bayer8
+}
+
 public static class Config
 {
     public const bool s_isDebugMode = true;
@@ -20,10 +27,16 @@ public static class Config
     public const int IMAGE_BUFFER_HEADER_SIZE = 64;
     // BGR8 frame size used by shared memory, live inference, UI, and IoT images.
     public const int IMAGE_BYTE_COUNT = IMAGE_WIDTH * IMAGE_HEIGHT * 3;
-    // The camera streams 8-bit Bayer (1 byte/pixel) so 1 Gbit/s GigE can sustain full frame rate.
-    // Recording consumes the raw frames; only frames selected for live inference are converted to BGR8.
-    public const int RAW_FRAME_BYTE_COUNT = IMAGE_WIDTH * IMAGE_HEIGHT;
-    // Accepted camera pixel formats in order of preference. The camera selects the first it supports.
+    // Pixel format the camera streams. Change this one value to switch between the two pipelines:
+    //   * Bayer8: 1 byte/pixel, so 1 Gbit/s GigE sustains about 44 FPS. Recording consumes the raw frames;
+    //     only frames selected for live inference are converted to BGR8 on the host. The host conversion
+    //     does not apply the camera's color transformation, so colors can differ from Bgr8 recordings.
+    //   * Bgr8 (legacy): 3 bytes/pixel, color-processed by the camera; GigE saturates near 17 FPS.
+    public const CameraPixelFormat CAMERA_PIXEL_FORMAT = CameraPixelFormat.Bayer8;
+    public const int CAMERA_BYTES_PER_PIXEL = CAMERA_PIXEL_FORMAT == CameraPixelFormat.Bgr8 ? 3 : 1;
+    // Size of one tightly packed camera frame as captured, pooled, and recorded.
+    public const int RAW_FRAME_BYTE_COUNT = IMAGE_WIDTH * IMAGE_HEIGHT * CAMERA_BYTES_PER_PIXEL;
+    // Bayer8 only: accepted camera Bayer patterns in order of preference. The camera selects the first it supports.
     public static readonly string[] CAMERA_BAYER_PIXEL_FORMATS = { "BayerRG8", "BayerBG8", "BayerGB8", "BayerGR8" };
     public const int IMAGE_BUFFER_SIZE = IMAGE_BUFFER_HEADER_SIZE + IMAGE_BUFFER_SLOT_COUNT * IMAGE_BYTE_COUNT;
 

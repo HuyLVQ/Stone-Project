@@ -10,7 +10,7 @@ using Basler.Pylon;
 //      bounded pool only after the final reference is disposed, preventing a consumer from observing pixels
 //      that capture has already overwritten. When the pool reaches its capacity, TryRent reports a drop
 //      instead of allocating unbounded image memory.
-//      Buffers hold tightly packed 8-bit Bayer frames; PixelType records the grab's exact Bayer pattern.
+//      Buffers hold tightly packed frames in Config.CAMERA_PIXEL_FORMAT; PixelType records the grab's exact type.
 public sealed class PooledFrameBuffer : IDisposable
 {
     private static readonly object s_poolLock = new object();

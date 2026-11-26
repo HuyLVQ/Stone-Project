@@ -15,7 +15,7 @@ namespace Stone_Application.CameraClass
         private long m_lastCaptureToken;
         private PixelType m_rawPixelType = PixelType.Undefined;
 
-        // 8-bit Bayer layout configured on the camera; recording sessions are created with this type.
+        // Pixel type configured on the camera (BGR8packed or an 8-bit Bayer layout); recording sessions use it.
         public PixelType RawPixelType => m_rawPixelType;
 
         // Lock to guard the access to camera resources
@@ -73,12 +73,23 @@ namespace Stone_Application.CameraClass
                     instance.m_camera = new Camera();
                     instance.m_camera.ConnectionLost += instance.OnConnectionLost;
                     instance.m_camera.Open();
-                    // Bayer8 is one third of BGR8's bandwidth; BGR8 saturates 1 Gbit/s GigE near 17 FPS.
+                    // Config.CAMERA_PIXEL_FORMAT selects the streamed format. Bayer8 is one third of BGR8's
+                    // bandwidth; BGR8 saturates 1 Gbit/s GigE near 17 FPS but keeps in-camera color processing.
                     var pixelFormat = instance.m_camera.Parameters[PLCamera.PixelFormat];
-                    if (!pixelFormat.TrySetValue(Config.CAMERA_BAYER_PIXEL_FORMATS))
-                        throw new NotSupportedException("The camera does not support any 8-bit Bayer pixel format (" +
-                            String.Join(", ", Config.CAMERA_BAYER_PIXEL_FORMATS) + ").");
-                    instance.m_rawPixelType = ParseBayerPixelType(pixelFormat.GetValue());
+#pragma warning disable CS0162 // One branch is unreachable for a given compile-time CAMERA_PIXEL_FORMAT.
+                    if (Config.CAMERA_PIXEL_FORMAT == CameraPixelFormat.Bgr8)
+                    {
+                        pixelFormat.SetValue(PLCamera.PixelFormat.BGR8);
+                        instance.m_rawPixelType = PixelType.BGR8packed;
+                    }
+                    else
+                    {
+                        if (!pixelFormat.TrySetValue(Config.CAMERA_BAYER_PIXEL_FORMATS))
+                            throw new NotSupportedException("The camera does not support any 8-bit Bayer pixel format (" +
+                                String.Join(", ", Config.CAMERA_BAYER_PIXEL_FORMATS) + ").");
+                        instance.m_rawPixelType = ParseBayerPixelType(pixelFormat.GetValue());
+                    }
+#pragma warning restore CS0162
                     instance.m_camera.Parameters[PLCamera.ExposureTime].SetValue(Config.EXPOSURE_TIME);
 
                     instance.m_camera.Parameters[PLCamera.AcquisitionMode].SetValue(PLCamera.AcquisitionMode.Continuous);
@@ -153,7 +164,8 @@ namespace Stone_Application.CameraClass
         //      2. Retrieve the latest camera image and timestamp it; account for retrieval failures and report
         //         a connection loss unless application shutdown canceled the capture.
         //      3. Record camera-reported skipped frames and reject unsuccessful grabs.
-        //      4. Rent a pooled frame buffer, copy the grab into tightly packed Bayer8 pixels, and record pool
+        //      4. Rent a pooled frame buffer, copy the grab into tightly packed pixels of the configured
+        //         format (Config.CAMERA_PIXEL_FORMAT), and record pool
         //         or copy failures in the active session's loss counters.
         //      5. Offer the owned frame to the session recorder, then reserve the configured IPC cadence and
         //         queue the frame for shared-memory publication when a live inference frame is due.
@@ -251,17 +263,29 @@ namespace Stone_Application.CameraClass
                 pixelType == PixelType.BayerGB8 || pixelType == PixelType.BayerGR8;
         }
 
-        // @brief: Copy an 8-bit Bayer camera image into a tightly packed destination frame
+        // @brief: Report whether a grab's pixel type matches Config.CAMERA_PIXEL_FORMAT
+        // @param:
+        //      * pixelType: Pixel type reported by a grab result
+        // @return: True for BGR8packed in Bgr8 mode, or any 8-bit Bayer layout in Bayer8 mode
+        private static bool IsConfiguredPixelType(PixelType pixelType)
+        {
+            return Config.CAMERA_PIXEL_FORMAT == CameraPixelFormat.Bgr8
+                ? pixelType == PixelType.BGR8packed
+                : IsBayer8(pixelType);
+        }
+
+        // @brief: Copy a camera image in the configured pixel format into a tightly packed destination frame
         // @param:
         //      * result: Successful camera grab containing the source pixels and image geometry
-        //      * destination: Pooled frame that receives the packed Bayer bytes and their exact pixel type
+        //      * destination: Pooled frame that receives the packed bytes and their exact pixel type
         // @details: The grab's own pixel type is kept so a Bayer pattern changed by ReverseX/ReverseY is honored.
         private static void CopyPixels(IGrabResult result, PooledFrameBuffer destination)
         {
             var pixelType = (PixelType)result.PixelTypeValue;
-            if (!IsBayer8(pixelType) ||
+            if (!IsConfiguredPixelType(pixelType) ||
                 result.Width != Config.IMAGE_WIDTH || result.Height != Config.IMAGE_HEIGHT)
-                throw new InvalidOperationException("Camera grab format does not match the configured Bayer8 image geometry.");
+                throw new InvalidOperationException("Camera grab format does not match the configured " +
+                    Config.CAMERA_PIXEL_FORMAT + " image geometry.");
 
             IntPtr source = result.PixelDataPointer;
             if (source == IntPtr.Zero)
@@ -275,7 +299,7 @@ namespace Stone_Application.CameraClass
                 return;
             }
 
-            int rowBytes = Config.IMAGE_WIDTH;
+            int rowBytes = Config.IMAGE_WIDTH * Config.CAMERA_BYTES_PER_PIXEL;
             int sourceStride = checked(rowBytes + padding);
             for (int row = 0; row < Config.IMAGE_HEIGHT; row++)
                 Marshal.Copy(IntPtr.Add(source, checked(row * sourceStride)), buffer, row * rowBytes, rowBytes);
