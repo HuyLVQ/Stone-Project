@@ -11,6 +11,7 @@ public static class Config
 
     public const int EXPOSURE_TIME = 5_000;
     public const int TIME_INTERVAL = 100;
+    public const int IPC_CAPTURE_INTERVAL_MS = 100;
     public const int IMAGE_WIDTH = 1_920;                           // Image width of the camera
     public const int IMAGE_HEIGHT = 1_200;                          // Image height of the camera
 
@@ -67,9 +68,11 @@ public static class Config
     public const int READ_OFFSET = IMAGE_BUFFER_SIZE;
     public const int OFFSET_IMAGE = 100;
 
-    public const int VIDEO_FRAME_RATE = 30;
+    public const int VIDEO_FRAME_RATE = 30; // Playback fallback when the camera cannot report its frame rate.
+    public const uint VIDEO_WRITER_QUALITY = 80;
     public const long VIDEO_SEGMENT_MAX_BYTES = 1_800_000_000;
-    public const int VIDEO_QUEUE_CAPACITY = 8; // About 53 MiB of queued raw frames.
+    public const int VIDEO_QUEUE_CAPACITY = 8;
+    public const int IPC_CAPTURE_QUEUE_CAPACITY = 2;
     public const int AI_STOP_TIMEOUT_MS = 15_000;
     public const int AI_EXIT_TIMEOUT_MS = 5_000;
     public const int AI_WARMUP_TIMEOUT_MS = 120_000;

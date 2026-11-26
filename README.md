@@ -10,7 +10,7 @@ Basler camera
     v
 .NET WinForms UI ------------------------------------------------------+
   capture worker -> shared-memory image ring -> Python live AI         |
-  recording queue -> recorder worker -> session AVI segments           |
+  recording queue -> Pylon writer worker -> session MP4 segments       |
   result worker  <- shared-memory result block <- completion event     |
     |                                                                   |
     +--> database persistence                                           |
@@ -32,7 +32,7 @@ STOP -> drain/finalize -> session manifest -> offline AI -> summary ---+
 2. Configure/connect the Basler camera in Settings.
 3. Initialize AI. The UI creates the named shared-memory mapping and events, starts the Python live AI process, and performs model warm-up.
 4. The capture and result workers are started but remain idle until a recording session begins.
-5. Press **Start** to create a database session, create a new AVI file, reset the image ring, and begin streaming.
+5. Press **Start** to create a database session, open a Pylon MP4 writer, reset the image ring, and begin streaming.
 
 ## Live session pipeline
 
@@ -40,16 +40,16 @@ STOP -> drain/finalize -> session manifest -> offline AI -> summary ---+
 
 While the session state is `STREAMING`:
 
-1. The camera worker retrieves the latest Basler BGR frame.
-2. The frame is copied into one of five shared-memory image slots.
-3. The acquired frame is offered to an eight-frame recording queue using its session token. A dedicated worker encodes JPEG and writes AVI chunks; queue overflow is counted rather than blocking capture.
+1. The camera worker retrieves the latest Basler BGR frame and copies it into a reusable buffer.
+2. Each valid frame is offered to the bounded Pylon writer queue. A full queue drops the incoming frame and increments the recording loss count.
+3. Live IPC takes a reference to the same buffer at most once every 100 ms (10 FPS). Its worker publishes the frame to one of five shared-memory slots.
 4. If the ring has no unused historical slot, the oldest non-protected slot is overwritten. The slot currently being inferred is never overwritten.
 
-The implementation uses `GrabStrategy.LatestImages`; therefore, capture performance must be validated against the camera rate, JPEG encoding rate, and disk throughput.
+Pylon encoding and segment rollover run on the recorder thread. Camera skips reported by `GrabStrategy.LatestImages`, recorder queue and pool drops, and write failures are included in recording losses. Live IPC throttling and publication failures are independent of those counts.
 
 ### Periodic live inference
 
-At each `TIME_INTERVAL` (currently 880 ms):
+At each `TIME_INTERVAL` (currently 100 ms):
 
 1. The UI selects the newest completed ring-buffer frame.
 2. The selected slot is protected and its index is written to the image-region header.
@@ -82,11 +82,11 @@ Named events:
 Pressing **Stop** follows this sequence:
 
 1. Session state changes to `READY`, preventing new camera frames and periodic live-inference dispatches.
-2. Recording acceptance closes and already queued frames drain to the recorder. Old-session frames cannot enter a new recording.
+2. Recording acceptance closes and the background writer drains frames it accepted for this session.
 3. Sent and received live-request counters settle independently of UI callbacks. The normal AI wait is bounded at 15 seconds; on timeout, the old AI process must exit before memory is cleared. A failed request is tracked separately from a received result.
-4. Shared memory and events reset only after the outstanding writer is settled. AVI segments are finalized and their handles released; a JSON manifest records segment paths, frame counts, and recording losses.
-5. The UI synchronously launches `1_AI_Process/src/video_inference.py` against that manifest.
-6. Offline analysis combines all segments using the same `YOLOImpl` and weight functions as live inference. It attempts bounded recovery past unreadable frames and skips failed frame inference. Counts are summed and weights averaged over successfully processed frames.
+4. Shared memory and events reset only after the outstanding live AI writer is settled. Pylon MP4 segments are closed and their handles released; a JSON manifest records segment paths, frame counts, and recording losses.
+5. The UI sends the finalized manifest to `1_AI_Process/src/offline_worker.py`.
+6. `Weight_v2/session_inference.py` samples the first recorded frame in each 0.88-second capture interval across all segments. It uses the existing Weight_v2 count and XGBoost pipeline and attempts bounded recovery past unreadable frames. Older recordings without capture timestamps continue to use the video playback rate.
 7. The summary includes expected/processed/skipped frames, recording losses, and a Complete/Partial/Unknown status. Zero processed frames produce an error instead of a finalized zero result.
 
 The UI intentionally remains unavailable for a new session while offline inference runs. This makes the recorded video the session's final source of truth.
@@ -103,7 +103,7 @@ Python result block -> UI result worker -> AIProcessEvent observers
 
 Offline video results are persisted as the finalized record for the session. Usable partial aggregates remain available with explicit quality metadata. Excel selects finalized records rather than live snapshots and writes status, expected frames, processed frames, skipped frames, and recording losses to columns J-N. Historical rows without quality metadata remain Unknown.
 
-AVI files roll over before reaching 1,800,000,000 bytes, with space reserved for the final index. All segments share one session manifest. Encoding failures skip the affected frame; failed chunk writes truncate back to the last complete chunk before continuing. A failed rollback or finalization faults the recording instead of publishing a completed path.
+MP4 segments roll over when Pylon reports that encoded image data has reached 1,800,000,000 bytes. All segments share one session manifest. Pylon writer failures are counted; a writer or finalization fault prevents publishing a completed path.
 
 ## Configuration
 
@@ -112,18 +112,19 @@ Key configuration is in `0_UI_Process/Stone_Application/Common/Config.cs`.
 | Setting | Current value / behavior |
 | --- | --- |
 | Image dimensions | 1920 x 1200, BGR8 |
-| `TIME_INTERVAL` | 880 ms |
+| `TIME_INTERVAL` | 100 ms |
 | Ring capacity | 5 frames |
-| Video format | Motion-JPEG AVI |
-| Nominal video frame rate | 30 FPS (`VIDEO_FRAME_RATE`) |
-| Recording queue | 8 raw frames, about 53 MiB (`VIDEO_QUEUE_CAPACITY`) |
-| AVI segment limit | 1,800,000,000 bytes (`VIDEO_SEGMENT_MAX_BYTES`) |
+| Video format | MP4 through Basler Pylon `VideoWriter`, YUV420p output |
+| Nominal video playback rate | Camera-reported acquisition estimate, with a 30 FPS fallback (`VIDEO_FRAME_RATE`) |
+| Recording queue | 8 pending frames (`VIDEO_QUEUE_CAPACITY`) |
+| Pylon writer quality | 80 (`VIDEO_WRITER_QUALITY`, valid range 1-100) |
+| MP4 segment limit | 1,800,000,000 bytes of encoded image data (`VIDEO_SEGMENT_MAX_BYTES`) |
 | AI STOP wait / process exit wait | 15,000 ms / 5,000 ms |
 | Decode recovery | Up to 30 consecutive failed positions per segment |
 | Video folder | `STONE_VIDEO_OUTPUT_PATH` environment variable, otherwise `<repository>\Recordings` |
 | Python executable | `1_AI_Process\.venv\Scripts\python.exe` |
 | Live AI entry point | `1_AI_Process\src\main.py` |
-| Offline AI entry point | `1_AI_Process\src\video_inference.py` |
+| Offline AI entry point | `1_AI_Process\src\offline_worker.py` |
 | YOLO weights | `Weight_v2\model\YOLO\best260719.pt` |
 
 Example video output configuration before starting the UI:
@@ -152,10 +153,10 @@ The checks use synthetic videos, injected file failures, and isolated IPC names.
 
 - STOP waits for an already-dispatched live request before clearing shared memory. This prevents Python from reading/writing memory while the UI erases it.
 - If a live request times out, Python is stopped and its exit confirmed before memory reuse. The next START reinitializes and warms up AI; if exit cannot be confirmed, START remains unavailable.
-- Offline inference reads JPEG-decoded AVI frames, whereas live inference reads raw camera BGR frames. The two paths use the same model pipeline but can produce slightly different detections because of video compression/decoding.
-- AVI uses a fixed nominal 30 FPS. If actual capture timing varies, playback timing is approximate rather than timestamp-accurate.
-- Queue and observed capture/encoding losses are reported; frames skipped internally by the camera's `LatestImages` strategy are not proven absent by a Complete analysis status.
-- Standalone AVI analysis without a recorder manifest has Unknown completeness. Preserve the manifest with its segments for repeatable session analysis.
+- Offline inference decodes Pylon MP4 frames and uses the Weight_v2 sampling and weight pipeline. Live inference reads raw camera BGR frames.
+- MP4 playback uses a constant rate. The manifest records one monotonic capture offset per written frame, so offline sampling follows elapsed capture time even if playback speed differs.
+- Observed capture and writer failures are reported; frames skipped internally by the camera's `LatestImages` strategy are not proven absent by a Complete analysis status.
+- Standalone video analysis without a recorder manifest has Unknown completeness. Preserve the manifest with its segments for repeatable session analysis.
 
 ## Related implementation notes
 

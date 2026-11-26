@@ -1,4 +1,4 @@
-"""Analyze finalized AVI segments, retaining explicit loss/completeness accounting."""
+"""Analyze finalized video segments, retaining explicit loss/completeness accounting."""
 import argparse
 import json
 import math
