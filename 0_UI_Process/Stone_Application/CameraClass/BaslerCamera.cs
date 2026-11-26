@@ -13,6 +13,10 @@ namespace Stone_Application.CameraClass
         private static BaslerCamera s_instance;
         private Camera m_camera;
         private long m_lastCaptureToken;
+        private PixelType m_rawPixelType = PixelType.Undefined;
+
+        // 8-bit Bayer layout configured on the camera; recording sessions are created with this type.
+        public PixelType RawPixelType => m_rawPixelType;
 
         // Lock to guard the access to camera resources
         private readonly object m_captureLock = new object();
@@ -69,7 +73,12 @@ namespace Stone_Application.CameraClass
                     instance.m_camera = new Camera();
                     instance.m_camera.ConnectionLost += instance.OnConnectionLost;
                     instance.m_camera.Open();
-                    instance.m_camera.Parameters[PLCamera.PixelFormat].SetValue(PLCamera.PixelFormat.BGR8);
+                    // Bayer8 is one third of BGR8's bandwidth; BGR8 saturates 1 Gbit/s GigE near 17 FPS.
+                    var pixelFormat = instance.m_camera.Parameters[PLCamera.PixelFormat];
+                    if (!pixelFormat.TrySetValue(Config.CAMERA_BAYER_PIXEL_FORMATS))
+                        throw new NotSupportedException("The camera does not support any 8-bit Bayer pixel format (" +
+                            String.Join(", ", Config.CAMERA_BAYER_PIXEL_FORMATS) + ").");
+                    instance.m_rawPixelType = ParseBayerPixelType(pixelFormat.GetValue());
                     instance.m_camera.Parameters[PLCamera.ExposureTime].SetValue(Config.EXPOSURE_TIME);
 
                     instance.m_camera.Parameters[PLCamera.AcquisitionMode].SetValue(PLCamera.AcquisitionMode.Continuous);
@@ -144,7 +153,7 @@ namespace Stone_Application.CameraClass
         //      2. Retrieve the latest camera image and timestamp it; account for retrieval failures and report
         //         a connection loss unless application shutdown canceled the capture.
         //      3. Record camera-reported skipped frames and reject unsuccessful grabs.
-        //      4. Rent a pooled frame buffer, copy the grab into tightly packed BGR8 pixels, and record pool
+        //      4. Rent a pooled frame buffer, copy the grab into tightly packed Bayer8 pixels, and record pool
         //         or copy failures in the active session's loss counters.
         //      5. Offer the owned frame to the session recorder, then reserve the configured IPC cadence and
         //         queue the frame for shared-memory publication when a live inference frame is due.
@@ -193,7 +202,7 @@ namespace Stone_Application.CameraClass
                 {
                     try
                     {
-                        CopyPixels(result, frame.Buffer);
+                        CopyPixels(result, frame);
                     }
                     catch (Exception ex)
                     {
@@ -216,30 +225,60 @@ namespace Stone_Application.CameraClass
             }
         }
 
-        // @brief: Copy a correctly formatted BGR8 camera image into a tightly packed destination buffer
+        // @brief: Map the camera's PixelFormat enumeration value to the matching 8-bit Bayer pixel type
+        // @param:
+        //      * value: PixelFormat enumeration value read back from the camera
+        // @return: The corresponding Bayer pixel type
+        private static PixelType ParseBayerPixelType(string value)
+        {
+            switch (value)
+            {
+                case "BayerRG8": return PixelType.BayerRG8;
+                case "BayerBG8": return PixelType.BayerBG8;
+                case "BayerGB8": return PixelType.BayerGB8;
+                case "BayerGR8": return PixelType.BayerGR8;
+                default: throw new NotSupportedException("Unsupported camera pixel format: " + value);
+            }
+        }
+
+        // @brief: Report whether a pixel type is one of the 8-bit Bayer layouts handled by capture
+        // @param:
+        //      * pixelType: Pixel type reported by a grab result
+        // @return: True for BayerRG8, BayerBG8, BayerGB8, and BayerGR8
+        private static bool IsBayer8(PixelType pixelType)
+        {
+            return pixelType == PixelType.BayerRG8 || pixelType == PixelType.BayerBG8 ||
+                pixelType == PixelType.BayerGB8 || pixelType == PixelType.BayerGR8;
+        }
+
+        // @brief: Copy an 8-bit Bayer camera image into a tightly packed destination frame
         // @param:
         //      * result: Successful camera grab containing the source pixels and image geometry
-        //      * destination: Buffer that receives the packed image bytes
-        private static void CopyPixels(IGrabResult result, byte[] destination)
+        //      * destination: Pooled frame that receives the packed Bayer bytes and their exact pixel type
+        // @details: The grab's own pixel type is kept so a Bayer pattern changed by ReverseX/ReverseY is honored.
+        private static void CopyPixels(IGrabResult result, PooledFrameBuffer destination)
         {
-            if ((PixelType)result.PixelTypeValue != PixelType.BGR8packed ||
+            var pixelType = (PixelType)result.PixelTypeValue;
+            if (!IsBayer8(pixelType) ||
                 result.Width != Config.IMAGE_WIDTH || result.Height != Config.IMAGE_HEIGHT)
-                throw new InvalidOperationException("Camera grab format does not match the configured BGR8 image geometry.");
+                throw new InvalidOperationException("Camera grab format does not match the configured Bayer8 image geometry.");
 
             IntPtr source = result.PixelDataPointer;
             if (source == IntPtr.Zero)
                 throw new InvalidOperationException("Camera grab returned a null pixel buffer.");
+            destination.PixelType = pixelType;
+            byte[] buffer = destination.Buffer;
             int padding = result.PaddingX;
             if (padding == 0)
             {
-                Marshal.Copy(source, destination, 0, Config.IMAGE_BYTE_COUNT);
+                Marshal.Copy(source, buffer, 0, Config.RAW_FRAME_BYTE_COUNT);
                 return;
             }
 
-            int rowBytes = Config.IMAGE_WIDTH * 3;
+            int rowBytes = Config.IMAGE_WIDTH;
             int sourceStride = checked(rowBytes + padding);
             for (int row = 0; row < Config.IMAGE_HEIGHT; row++)
-                Marshal.Copy(IntPtr.Add(source, checked(row * sourceStride)), destination, row * rowBytes, rowBytes);
+                Marshal.Copy(IntPtr.Add(source, checked(row * sourceStride)), buffer, row * rowBytes, rowBytes);
         }
 
         // @brief: Stop camera activity, detach connection notifications, and release the Pylon camera

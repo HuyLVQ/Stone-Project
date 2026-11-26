@@ -18,7 +18,13 @@ public static class Config
     public const int BUFFER_BOUND = 5;
     public const int IMAGE_BUFFER_SLOT_COUNT = 5;
     public const int IMAGE_BUFFER_HEADER_SIZE = 64;
+    // BGR8 frame size used by shared memory, live inference, UI, and IoT images.
     public const int IMAGE_BYTE_COUNT = IMAGE_WIDTH * IMAGE_HEIGHT * 3;
+    // The camera streams 8-bit Bayer (1 byte/pixel) so 1 Gbit/s GigE can sustain full frame rate.
+    // Recording consumes the raw frames; only frames selected for live inference are converted to BGR8.
+    public const int RAW_FRAME_BYTE_COUNT = IMAGE_WIDTH * IMAGE_HEIGHT;
+    // Accepted camera pixel formats in order of preference. The camera selects the first it supports.
+    public static readonly string[] CAMERA_BAYER_PIXEL_FORMATS = { "BayerRG8", "BayerBG8", "BayerGB8", "BayerGR8" };
     public const int IMAGE_BUFFER_SIZE = IMAGE_BUFFER_HEADER_SIZE + IMAGE_BUFFER_SLOT_COUNT * IMAGE_BYTE_COUNT;
 
     public const int ENC_ADDR = 0;

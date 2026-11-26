@@ -9,7 +9,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Basler.Pylon;
 using Stone_Application.Event;
+using IImage = Stone_Application.Event.IImage;
 
 namespace Stone_Application.IPC
 {
@@ -35,6 +37,11 @@ namespace Stone_Application.IPC
         public bool IsCurrentSession(long token) { lock (m_ringLock) return m_sessionActive && token == m_sessionToken; }
         private readonly ManualResetEventSlim m_noInferenceInFlight = new ManualResetEventSlim(true);
         private readonly BlockingCollection<CaptureFrame> m_captureQueue = new BlockingCollection<CaptureFrame>(Config.IPC_CAPTURE_QUEUE_CAPACITY);
+        // Raw Bayer frames selected for live inference are converted to BGR8 here, off the camera thread.
+        // PixelDataConverter is not thread-safe, so conversion and its scratch buffer share one lock.
+        private readonly object m_convertLock = new object();
+        private PixelDataConverter m_bgrConverter;
+        private readonly byte[] m_bgrFrame = new byte[Config.IMAGE_BYTE_COUNT];
 
         private IPCServices() : this("", () => AIHelper.IsLiveReady && Common.pythonProcess != null && !Common.pythonProcess.HasExited,
             StopLiveAi, Config.AI_STOP_TIMEOUT_MS) { }
@@ -79,7 +86,7 @@ namespace Stone_Application.IPC
         // drops the oldest pending frame if publication falls behind.
         public bool QueueCaptureFrame(PooledFrameBuffer image, long sessionToken)
         {
-            if (image == null || image.Length != Config.IMAGE_BYTE_COUNT)
+            if (image == null || image.Length != Config.RAW_FRAME_BYTE_COUNT)
                 throw new ArgumentException("Camera frame size does not match the configured image dimensions.", nameof(image));
             if (!IsCurrentSession(sessionToken)) return false;
             var frame = new CaptureFrame { Image = image, SessionToken = sessionToken };
@@ -228,11 +235,36 @@ namespace Stone_Application.IPC
                 return m_sessionActive;
         }
 
+        // @brief: Convert a raw Bayer camera frame to BGR8 and publish it to the next free ring slot
+        // @param:
+        //      * p_image: Pooled raw frame; its PixelType names the Bayer layout
+        //      * sessionToken: Session that captured the frame
+        // @return: True if the frame was written to shared memory
+        // @details: Conversion runs before the ring lock is taken, so the lock still covers only a memory copy.
         public bool captureFrame(PooledFrameBuffer p_image, long sessionToken)
         {
-            if (p_image == null || p_image.Length != Config.IMAGE_BYTE_COUNT)
+            if (p_image == null || p_image.Length != Config.RAW_FRAME_BYTE_COUNT)
                 throw new ArgumentException("Camera frame size does not match the configured image dimensions.", nameof(p_image));
+            if (!IsCurrentSession(sessionToken))
+                return false;
 
+            lock (m_convertLock)
+            {
+                if (m_bgrConverter == null)
+                    m_bgrConverter = new PixelDataConverter { OutputPixelFormat = PixelType.BGR8packed };
+                m_bgrConverter.Convert(m_bgrFrame, p_image.Buffer, p_image.PixelType,
+                    Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, 0, ImageOrientation.TopDown);
+                return publishBgrFrame(m_bgrFrame, sessionToken);
+            }
+        }
+
+        // @brief: Write one BGR8 frame into the next ring slot that is not being inferred
+        // @param:
+        //      * bgrFrame: Packed BGR8 pixels, IMAGE_BYTE_COUNT bytes
+        //      * sessionToken: Session that captured the frame
+        // @return: True if the frame was written to shared memory
+        private bool publishBgrFrame(byte[] bgrFrame, long sessionToken)
+        {
             lock (m_ringLock)
             {
                 if (!m_sessionActive || sessionToken != m_sessionToken)
@@ -252,7 +284,7 @@ namespace Stone_Application.IPC
 
                 long offset = Config.WRITE_OFFSET + Config.IMAGE_BUFFER_HEADER_SIZE + (long)slot * Config.IMAGE_BYTE_COUNT;
                 using (MemoryMappedViewStream stream = Common.mmf.CreateViewStream(offset, Config.IMAGE_BYTE_COUNT))
-                    stream.Write(p_image.Buffer, 0, Config.IMAGE_BYTE_COUNT);
+                    stream.Write(bgrFrame, 0, Config.IMAGE_BYTE_COUNT);
 
                 m_latestSlot = slot;
                 m_nextSlot = (slot + 1) % Config.IMAGE_BUFFER_SLOT_COUNT;
