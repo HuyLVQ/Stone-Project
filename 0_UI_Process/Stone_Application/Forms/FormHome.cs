@@ -139,7 +139,8 @@ namespace Stone_Application.Forms
                     throw new InvalidOperationException("Reconnect the camera before starting a session.");
                 Common.StartPostgreSqlSession();
                 ipc.beginSession();
-                Common.videoRecorder.StartSession(ipc.SessionToken, Common.camera.GetRecordingPlaybackFrameRate());
+                Common.videoRecorder.StartSession(ipc.SessionToken, Common.camera.GetRecordingPlaybackFrameRate(),
+                    Common.camera.RawPixelType);
                 Common.s_stopWatchMain.Restart();
                 enableStreaming();
                 Stone_Application.Networking.Iot.IotServer.Instance.StartImageMode(ipc.SessionToken);

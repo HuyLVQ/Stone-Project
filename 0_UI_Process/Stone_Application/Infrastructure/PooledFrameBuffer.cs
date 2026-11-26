@@ -1,14 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Basler.Pylon;
 
-// @brief: Reuse fixed-size camera image buffers across recording and live IPC workers
+// @brief: Reuse fixed-size raw camera frame buffers across recording and live IPC workers
 // @details:
 //      Each rented instance starts with one owner reference. Asynchronous consumers add references before
 //      queueing the frame and release them when finished. The underlying byte array returns to the shared,
 //      bounded pool only after the final reference is disposed, preventing a consumer from observing pixels
 //      that capture has already overwritten. When the pool reaches its capacity, TryRent reports a drop
 //      instead of allocating unbounded image memory.
+//      Buffers hold tightly packed 8-bit Bayer frames; PixelType records the grab's exact Bayer pattern.
 public sealed class PooledFrameBuffer : IDisposable
 {
     private static readonly object s_poolLock = new object();
@@ -20,7 +22,9 @@ public sealed class PooledFrameBuffer : IDisposable
     private int m_references = 1;
 
     public byte[] Buffer => m_buffer ?? throw new ObjectDisposedException(nameof(PooledFrameBuffer));
-    public int Length => Config.IMAGE_BYTE_COUNT;
+    public int Length => Config.RAW_FRAME_BYTE_COUNT;
+    // Pixel layout of Buffer, set by capture before the frame is shared with any consumer.
+    public PixelType PixelType { get; set; } = PixelType.Undefined;
 
     // @brief: Wrap a byte array rented from the shared frame buffer pool
     // @param:
@@ -40,7 +44,7 @@ public sealed class PooledFrameBuffer : IDisposable
                 buffer = s_buffers.Pop();
             else if (s_created < Capacity)
             {
-                buffer = new byte[Config.IMAGE_BYTE_COUNT];
+                buffer = new byte[Config.RAW_FRAME_BYTE_COUNT];
                 s_created++;
             }
             else

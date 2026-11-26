@@ -32,6 +32,8 @@ public sealed class VideoRecorder : IDisposable
         public long FailedFrames { get; set; }
         public long DurationMilliseconds { get; set; }
         public double PlaybackFramesPerSecond { get; set; }
+        // Camera pixel format fed to the encoder (for example BayerRG8). Readers may ignore it.
+        public string SourcePixelFormat { get; set; }
         public string Error { get; set; }
     }
 
@@ -53,6 +55,7 @@ public sealed class VideoRecorder : IDisposable
     private bool m_accepting;
     private long m_session;
     private string m_prefix, m_path;
+    private PixelType m_sourcePixelType;
     private List<long> m_captureOffsets;
     private RecordingManifest m_manifest;
     public string LastCompletedPath { get; private set; }
@@ -73,15 +76,20 @@ public sealed class VideoRecorder : IDisposable
     // @param:
     //      * sessionToken: Immutable identity assigned to this recording session
     //      * playbackFramesPerSecond: Frame rate used to encode the session video
+    //      * sourcePixelType: Raw camera pixel type of recorded frames (8-bit Bayer)
     // @details:
     //      Creates a unique session directory and manifest, starts the writer, waits for its first segment
     //      to open, and only then accepts frames. A previous session must be fully finalized first.
-    public void StartSession(long sessionToken, double playbackFramesPerSecond)
+    //      Pylon converts each raw frame to the MP4's YUV420p format on the writer thread.
+    public void StartSession(long sessionToken, double playbackFramesPerSecond, PixelType sourcePixelType)
     {
         lock (m_stopLock)
         {
             if (m_worker != null)
                 throw new InvalidOperationException("Previous recording has not been finalized.");
+            if (sourcePixelType == PixelType.Undefined)
+                throw new ArgumentException("The camera pixel format is unknown.", nameof(sourcePixelType));
+            m_sourcePixelType = sourcePixelType;
             LastCompletedPath = null;
             LastRecording = null;
             string recordingName = "session_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "_" + Guid.NewGuid().ToString("N");
@@ -93,7 +101,8 @@ public sealed class VideoRecorder : IDisposable
                 m_manifest = new RecordingManifest
                 {
                     SessionToken = sessionToken,
-                    PlaybackFramesPerSecond = playbackFramesPerSecond
+                    PlaybackFramesPerSecond = playbackFramesPerSecond,
+                    SourcePixelFormat = sourcePixelType.ToString()
                 };
                 m_session = sessionToken;
                 m_writerFaulted = false;
@@ -128,7 +137,7 @@ public sealed class VideoRecorder : IDisposable
     // @brief: Offer an owned camera frame to the active recording queue
     // @param:
     //      * sessionToken: Identity of the session that captured the frame
-    //      * pixels: Pooled frame buffer containing packed BGR8 image data
+    //      * pixels: Pooled frame buffer containing packed 8-bit Bayer image data
     //      * captureTimestamp: Stopwatch timestamp captured when the camera frame was retrieved
     // @return: True if the frame was accepted by the recorder queue
     // @details: The recorder adds its own buffer reference for accepted frames and releases it after writing.
@@ -325,7 +334,8 @@ public sealed class VideoRecorder : IDisposable
             OpenSegment();
         }
 
-        m_videoWriter.Write(frame.Pixels.Buffer, PixelType.BGR8packed,
+        // Use the grab's own Bayer type; Pylon converts it to YUV420p before encoding.
+        m_videoWriter.Write(frame.Pixels.Buffer, frame.Pixels.PixelType,
             Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, 0, ImageOrientation.TopDown);
         m_captureOffsets.Add(frame.CaptureOffsetMicroseconds);
     }
@@ -339,7 +349,7 @@ public sealed class VideoRecorder : IDisposable
         {
             if (!VideoWriter.IsSupported)
                 throw new NotSupportedException("The installed Pylon video writer libraries are unavailable.");
-            writer.Create(m_path, m_manifest.PlaybackFramesPerSecond, PixelType.BGR8packed,
+            writer.Create(m_path, m_manifest.PlaybackFramesPerSecond, m_sourcePixelType,
                 Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, Config.VIDEO_WRITER_QUALITY);
             m_captureOffsets = new List<long>();
             m_videoWriter = writer;

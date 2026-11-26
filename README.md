@@ -40,7 +40,7 @@ STOP -> drain/finalize -> session manifest -> offline AI -> summary ---+
 
 While the session state is `STREAMING`:
 
-1. The camera worker retrieves the latest Basler BGR frame and copies it into a reusable buffer.
+1. The camera worker retrieves the latest Basler Bayer8 frame (1 byte/pixel, the camera's own Bayer pattern) and copies it into a reusable buffer. Bayer8 keeps 1920 x 1200 within 1 Gbit/s GigE bandwidth at full frame rate; BGR8 saturated the link near 17 FPS.
 2. Each valid frame is offered to the bounded Pylon writer queue. A full queue drops the incoming frame and increments the recording loss count.
 3. Live IPC takes a reference to the same buffer at most once every 100 ms (10 FPS). Its worker publishes the frame to one of five shared-memory slots.
 4. If the ring has no unused historical slot, the oldest non-protected slot is overwritten. The slot currently being inferred is never overwritten.
@@ -111,7 +111,7 @@ Key configuration is in `0_UI_Process/Stone_Application/Common/Config.cs`.
 
 | Setting | Current value / behavior |
 | --- | --- |
-| Image dimensions | 1920 x 1200, BGR8 |
+| Image dimensions | 1920 x 1200. Camera streams Bayer8 (first supported of `BayerRG8`, `BayerBG8`, `BayerGB8`, `BayerGR8`); shared memory and live inference use BGR8 |
 | `TIME_INTERVAL` | 100 ms |
 | Ring capacity | 5 frames |
 | Video format | MP4 through Basler Pylon `VideoWriter`, YUV420p output |
@@ -153,7 +153,7 @@ The checks use synthetic videos, injected file failures, and isolated IPC names.
 
 - STOP waits for an already-dispatched live request before clearing shared memory. This prevents Python from reading/writing memory while the UI erases it.
 - If a live request times out, Python is stopped and its exit confirmed before memory reuse. The next START reinitializes and warms up AI; if exit cannot be confirmed, START remains unavailable.
-- Offline inference decodes Pylon MP4 frames and uses the Weight_v2 sampling and weight pipeline. Live inference reads raw camera BGR frames.
+- Offline inference decodes Pylon MP4 frames and uses the Weight_v2 sampling and weight pipeline. Live inference reads BGR8 frames converted from the raw Bayer capture by Pylon's `PixelDataConverter`, only for the frames selected at the IPC cadence. Pylon's video writer converts every recorded Bayer frame to YUV420p itself.
 - MP4 playback uses a constant rate. The manifest records one monotonic capture offset per written frame, so offline sampling follows elapsed capture time even if playback speed differs.
 - Observed capture and writer failures are reported; frames skipped internally by the camera's `LatestImages` strategy are not proven absent by a Complete analysis status.
 - Standalone video analysis without a recorder manifest has Unknown completeness. Preserve the manifest with its segments for repeatable session analysis.
