@@ -48,14 +48,15 @@ The current event protocol permits only one inference in flight. If inference it
 
 ## Video recording
 
-The UI now creates Motion-JPEG AVI files without adding a native codec or package dependency.
+The UI uses Basler Pylon's `VideoWriter` to create MP4 files. The capture loop copies each valid grab into a reusable buffer and offers it to a queue of eight frames. The writer thread consumes the queue, encodes frames, and closes each segment. Live IPC shares references to those buffers at up to 10 FPS.
 
 - **Start:** `FormHome` starts a new `VideoRecorder` session.
-- **Frames:** every frame successfully acquired by the camera while streaming is appended, including frames not selected for inference.
-- **Stop/exit:** the current AVI index/header is finalized on STOP and during application cleanup.
-- **Filename:** `session_yyyyMMdd_HHmmss_fff.avi`.
+- **Frames:** every frame successfully acquired by the camera while streaming is offered to Pylon's writer, including frames not selected for inference.
+- **Stop/exit:** each MP4 segment is closed on STOP and during application cleanup.
+- **Filename:** `session_yyyyMMdd_HHmmss_fff_part0001.mp4`.
 - **Output folder:** environment variable `STONE_VIDEO_OUTPUT_PATH`; default is `<repository root>\Recordings`.
-- **Playback rate:** `VIDEO_FRAME_RATE`, currently 30 FPS.
+- **Playback rate:** the camera's estimated acquisition rate, with `VIDEO_FRAME_RATE` (30 FPS) as the fallback.
+- **Quality:** `VIDEO_WRITER_QUALITY`, currently 80 on Pylon's 1-100 quality scale.
 
 Example configuration before launching the UI:
 
@@ -65,7 +66,7 @@ $env:STONE_VIDEO_OUTPUT_PATH = 'D:\StoneRecordings'
 
 ### Video concern
 
-The AVI records all captured frames but has a fixed nominal 30 FPS playback rate. It does not encode individual capture timestamps, so a variable-rate camera stream will not preserve exact wall-clock timing during playback. The JPEG encoding and disk speed also set a practical upper bound on sustainable capture throughput.
+MP4 segments use constant-rate playback. The manifest stores capture offsets for the offline sampler and counts queue drops, buffer pool drops, observed camera skips, and writer failures. The bounded queue absorbs brief writer delays. Sustained throughput depends on encoding and disk speed.
 
 ## Weight path update
 
@@ -96,26 +97,24 @@ Hardware-dependent validation should be performed with the camera, AI environmen
 1. Confirm the Python process opens the larger named shared-memory mapping.
 2. Confirm result counts, weights, result image, database rows, and UI updates remain correct.
 3. Confirm capture continues while an intentionally slow inference is running.
-4. Confirm each START/STOP sequence creates one playable AVI in the configured folder.
+4. Confirm each START/STOP sequence creates playable MP4 segments and a manifest in the configured folder.
 
 ## Offline video inference after STOP
 
-After STOP finalizes the AVI, the UI launches `1_AI_Process/src/video_inference.py` synchronously. This is a dedicated offline entry point that imports and uses the same `YOLOImpl` class and `processAndVisualizeWithMultipleWeight` method as the runtime image pipeline; it does not use the shared-memory events and therefore cannot interfere with capture or the live AI process.
+After STOP closes the MP4 segments, the UI sends the manifest to `1_AI_Process/src/offline_worker.py`. The worker uses the Weight_v2 pipeline and samples 0.88-second capture intervals using frame offsets from the manifest.
 
-Every readable video frame is inferred. The video process emits one machine-readable result line that the UI parses and displays in a structured MessageBox:
+The worker emits one machine-readable result line with:
 
 - accumulated counts for `MiSang`, `1x2`, `2x4`, and `4x6`;
-- average of each per-frame model-weight output; and
-- the number of frames processed.
+- an aggregate XGBoost weight prediction; and
+- processed, expected, and skipped sample counts and recording losses.
 
-The UI disables a new START action and uses a wait cursor until this operation completes. If offline inference fails, the AVI remains finalized and an error MessageBox is shown.
+The UI disables a new START action and uses a wait cursor until this operation completes. If offline inference fails, the MP4 remains finalized and an error MessageBox is shown.
 
 ### Aggregation assumptions and risks
 
-Counts are accumulated across all frames, following the PO's assurance that the model safely handles duplicate objects. This must be treated as a model-level contract: ordinary per-frame object detection does not itself guarantee cross-frame de-duplication. If that assurance is not true in production, the accumulated counts will be inflated and a tracking/de-duplication strategy will be required.
+Counts are accumulated across successfully processed samples. Per-frame detection does not deduplicate objects across frames. The Weight_v2 pipeline predicts weight from the aggregate sample features.
 
-Weight outputs are averaged over processed frames as requested. A frame that yields no usable weight contributes zero with the present runtime model behavior.
+### Why closing the Pylon writer first matters
 
-### Why finalizing the AVI first matters
-
-AVI files contain an index and header values that are completed only when recording is stopped. Attempting to open the file before finalization can cause OpenCV to see an incomplete frame list, stop early, or reject the file entirely. The STOP flow therefore closes the writer first, patches the AVI metadata, releases the file handle, verifies that a path exists, and only then starts the offline process. Abrupt power loss, process termination, disk-full errors, or exceptions during finalization can still leave a partial AVI; the offline process reports that failure instead of producing a partial aggregate silently.
+Pylon finalizes MP4 metadata when the writer closes. The STOP flow therefore closes the writer and releases the file handle before starting offline analysis. Abrupt power loss, process termination, disk-full errors, or exceptions during finalization can still leave a partial MP4; the offline process reports that failure instead of producing a partial aggregate silently.

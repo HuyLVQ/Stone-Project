@@ -28,17 +28,20 @@ runs/
 .DS_Store
 Thumbs.db
 
-# 0_UI_Process / Visual Studio build files
-0_UI_Process/Stone_Application/bin/
-0_UI_Process/Stone_Application/obj/
-0_UI_Process/Stone_Application/*.user
-0_UI_Process/Stone_Application/*.suo
-0_UI_Process/Stone_Application/*.userosscache
-0_UI_Process/Stone_Application/*.sln.docstates
+# Visual Studio build output and per-user files (any depth)
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
 
 
 # Recording files
-Recording/*
+Recordings/
 
 # Excel files
 0_UI_Process/Stone_Application/PDF_Reference/*.xlsx
+# Excel export templates loaded by Common/Config.cs
+!0_UI_Process/Stone_Application/PDF_Reference/Reference.xlsx
+!0_UI_Process/Stone_Application/PDF_Reference/Reference2.xlsx

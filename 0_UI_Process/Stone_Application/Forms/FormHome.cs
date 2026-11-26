@@ -139,7 +139,7 @@ namespace Stone_Application.Forms
                     throw new InvalidOperationException("Reconnect the camera before starting a session.");
                 Common.StartPostgreSqlSession();
                 ipc.beginSession();
-                Common.videoRecorder.StartSession(ipc.SessionToken);
+                Common.videoRecorder.StartSession(ipc.SessionToken, Common.camera.GetRecordingPlaybackFrameRate());
                 Common.s_stopWatchMain.Restart();
                 enableStreaming();
                 Stone_Application.Networking.Iot.IotServer.Instance.StartImageMode(ipc.SessionToken);
@@ -198,7 +198,7 @@ namespace Stone_Application.Forms
                     }
                     finally
                     {
-                        // Recording drains/finalizes even when live AI recovery fails.
+                        // Wait for the recorder even when live AI recovery fails.
                         videoPath = Common.videoRecorder.StopSession();
                     }
 

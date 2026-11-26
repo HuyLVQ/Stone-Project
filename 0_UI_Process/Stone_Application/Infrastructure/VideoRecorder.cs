@@ -2,17 +2,21 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
+using Basler.Pylon;
 
-// Capture only enqueues owned frame buffers. One worker owns all AVI file state.
 public sealed class VideoRecorder : IDisposable
 {
-    public sealed class Segment { public string Path { get; set; } public long Frames { get; set; } }
+    public sealed class Segment
+    {
+        public string Path { get; set; }
+        public long Frames { get; set; }
+        public List<long> CaptureOffsetsMicroseconds { get; set; }
+    }
+
     public sealed class RecordingManifest
     {
         public int Version { get; set; } = 1;
@@ -20,196 +24,265 @@ public sealed class VideoRecorder : IDisposable
         public List<Segment> Segments { get; set; } = new List<Segment>();
         public long Captured { get; set; }
         public long Dropped { get; set; }
+        public long QueueDrops { get; set; }
+        public long BufferPoolDrops { get; set; }
         public long CaptureFailures { get; set; }
+        // Included in CaptureFailures for compatibility with existing manifest readers.
+        public long CameraSkippedFrames { get; set; }
         public long FailedFrames { get; set; }
         public long DurationMilliseconds { get; set; }
+        public double PlaybackFramesPerSecond { get; set; }
         public string Error { get; set; }
+    }
+
+    private struct QueuedFrame
+    {
+        public PooledFrameBuffer Pixels;
+        public long CaptureOffsetMicroseconds;
     }
 
     private readonly object m_lock = new object();
     private readonly object m_stopLock = new object();
     private readonly string m_outputPath;
     private readonly long m_segmentLimit;
-    private readonly int m_capacity;
-    private readonly Func<byte[], byte[]> m_encoder;
-    private readonly Func<string, Stream> m_open;
-    private readonly Stopwatch m_sessionClock = new Stopwatch();
-    private BlockingCollection<byte[]> m_queue;
+    private BlockingCollection<QueuedFrame> m_queue;
     private Task m_worker;
+    private long m_startTimestamp;
+    private bool m_writerFaulted;
+    private VideoWriter m_videoWriter;
     private bool m_accepting;
     private long m_session;
     private string m_prefix, m_path;
+    private List<long> m_captureOffsets;
     private RecordingManifest m_manifest;
-    private Stream m_stream;
-    private BinaryWriter m_writer;
-    private long m_riffSizeOffset, m_moviSizeOffset, m_moviDataOffset, m_frameCountOffset, m_streamLengthOffset;
-    private readonly List<AviIndexEntry> m_index = new List<AviIndexEntry>();
     public string LastCompletedPath { get; private set; }
     public RecordingManifest LastRecording { get; private set; }
 
-    public VideoRecorder(string outputPath = null, long segmentLimit = Config.VIDEO_SEGMENT_MAX_BYTES,
-        int capacity = Config.VIDEO_QUEUE_CAPACITY, Func<byte[], byte[]> encoder = null,
-        Func<string, Stream> open = null)
+    // @brief: Create a recorder with an output directory and maximum encoded segment size
+    // @param:
+    //      * outputPath: Directory for session recordings, or null to use the configured output directory
+    //      * segmentLimit: Maximum encoded image data allowed in one segment
+    public VideoRecorder(string outputPath = null, long segmentLimit = Config.VIDEO_SEGMENT_MAX_BYTES)
     {
         if (segmentLimit < 1024 || segmentLimit > 1_900_000_000) throw new ArgumentOutOfRangeException(nameof(segmentLimit));
-        if (capacity < 1) throw new ArgumentOutOfRangeException(nameof(capacity));
         m_outputPath = outputPath ?? Config.s_videoOutputPath;
-        m_segmentLimit = segmentLimit; m_capacity = capacity;
-        m_encoder = encoder ?? EncodeJpeg;
-        m_open = open ?? (path => new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read));
+        m_segmentLimit = segmentLimit;
     }
 
-    public void StartSession(long sessionToken)
+    // @brief: Initialize a recording session and start its dedicated Pylon writer worker
+    // @param:
+    //      * sessionToken: Immutable identity assigned to this recording session
+    //      * playbackFramesPerSecond: Frame rate used to encode the session video
+    // @details:
+    //      Creates a unique session directory and manifest, starts the writer, waits for its first segment
+    //      to open, and only then accepts frames. A previous session must be fully finalized first.
+    public void StartSession(long sessionToken, double playbackFramesPerSecond)
     {
         lock (m_stopLock)
-        lock (m_lock)
         {
-            if (m_worker != null) throw new InvalidOperationException("Previous recording has not been drained.");
-            Directory.CreateDirectory(m_outputPath);
+            if (m_worker != null)
+                throw new InvalidOperationException("Previous recording has not been finalized.");
+            LastCompletedPath = null;
+            LastRecording = null;
             string recordingName = "session_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "_" + Guid.NewGuid().ToString("N");
-            string recordingDirectory = Path.Combine(m_outputPath, recordingName);
+            string recordingDirectory = Path.Combine(Path.GetFullPath(m_outputPath), recordingName);
             Directory.CreateDirectory(recordingDirectory);
             m_prefix = Path.Combine(recordingDirectory, recordingName);
-            m_manifest = new RecordingManifest { SessionToken = sessionToken };
-            m_session = sessionToken;
-            m_sessionClock.Reset();
-            LastCompletedPath = null; LastRecording = null;
-            m_queue = new BlockingCollection<byte[]>(m_capacity);
-            // Open synchronously so START errors do not masquerade as a running recorder.
-            try { OpenSegment(); }
-            catch { m_queue.Dispose(); m_queue = null; throw; }
-            m_sessionClock.Start();
-            m_accepting = true;
-            m_worker = Task.Run((Action)RecordLoop);
+            lock (m_lock)
+            {
+                m_manifest = new RecordingManifest
+                {
+                    SessionToken = sessionToken,
+                    PlaybackFramesPerSecond = playbackFramesPerSecond
+                };
+                m_session = sessionToken;
+                m_writerFaulted = false;
+                m_queue = new BlockingCollection<QueuedFrame>(Config.VIDEO_QUEUE_CAPACITY);
+            }
+
+            var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            try
+            {
+                m_worker = Task.Factory.StartNew(() => RecordLoop(started), CancellationToken.None,
+                    TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                started.Task.GetAwaiter().GetResult();
+                lock (m_lock)
+                {
+                    if (m_queue.IsAddingCompleted)
+                        throw new InvalidOperationException("Recording stopped while starting.");
+                    m_startTimestamp = Stopwatch.GetTimestamp();
+                    m_accepting = true;
+                }
+            }
+            catch
+            {
+                StopAccepting();
+                m_worker?.GetAwaiter().GetResult();
+                lock (m_lock) ResetSession();
+                throw;
+            }
         }
     }
 
-    public bool TryAppend(long sessionToken, byte[] frame)
+    // The capture thread only offers an owned frame. The worker does all Pylon I/O.
+    // @brief: Offer an owned camera frame to the active recording queue
+    // @param:
+    //      * sessionToken: Identity of the session that captured the frame
+    //      * pixels: Pooled frame buffer containing packed BGR8 image data
+    //      * captureTimestamp: Stopwatch timestamp captured when the camera frame was retrieved
+    // @return: True if the frame was accepted by the recorder queue
+    // @details: The recorder adds its own buffer reference for accepted frames and releases it after writing.
+    public bool TryAppend(long sessionToken, PooledFrameBuffer pixels, long captureTimestamp)
     {
+        if (pixels == null) throw new ArgumentNullException(nameof(pixels));
         lock (m_lock)
         {
             if (!m_accepting || sessionToken != m_session) return false;
             m_manifest.Captured++;
-            // Caller transfers an immutable buffer; the camera allocates one per grab.
-            if (m_queue.TryAdd(frame)) return true;
-            m_manifest.Dropped++;
-            return false;
+            if (m_writerFaulted)
+            {
+                m_manifest.FailedFrames++;
+                return false;
+            }
+
+            var frame = new QueuedFrame
+            {
+                Pixels = pixels,
+                CaptureOffsetMicroseconds = (long)(Math.Max(0L, captureTimestamp - m_startTimestamp)
+                    * (1_000_000.0 / Stopwatch.Frequency))
+            };
+            pixels.AddReference();
+            bool accepted = false;
+            try
+            {
+                accepted = m_queue.TryAdd(frame);
+                if (accepted) return true;
+                m_manifest.Dropped++;
+                m_manifest.QueueDrops++;
+                return false;
+            }
+            finally { if (!accepted) pixels.Dispose(); }
         }
     }
 
-    public void NoteCaptureFailure(long sessionToken, long count = 1)
+    // @brief: Add one camera capture failure to the active session manifest
+    // @param:
+    //      * sessionToken: Identity of the session associated with the failed capture
+    public void NoteCaptureFailure(long sessionToken)
     {
         lock (m_lock)
-            if (m_accepting && sessionToken == m_session) m_manifest.CaptureFailures += count;
+            if (m_accepting && sessionToken == m_session) m_manifest.CaptureFailures++;
     }
 
+    // @brief: Record camera-reported skipped frames in the active session manifest
+    // @param:
+    //      * sessionToken: Identity of the session associated with the skipped frames
+    //      * count: Number of frames reported as skipped by the camera grab result
+    public void NoteCameraSkipped(long sessionToken, long count)
+    {
+        if (count <= 0) return;
+        lock (m_lock)
+        {
+            if (!m_accepting || sessionToken != m_session) return;
+            m_manifest.CaptureFailures += count;
+            m_manifest.CameraSkippedFrames += count;
+        }
+    }
+
+    // @brief: Record a frame dropped because no pooled buffer was available
+    // @param:
+    //      * sessionToken: Identity of the session associated with the dropped frame
+    public void NotePoolDrop(long sessionToken)
+    {
+        lock (m_lock)
+        {
+            if (!m_accepting || sessionToken != m_session) return;
+            m_manifest.Captured++;
+            m_manifest.Dropped++;
+            m_manifest.BufferPoolDrops++;
+        }
+    }
+
+    // @brief: Close the recorder queue to new frames and capture the session duration
+    // @details: The writer worker continues draining frames already accepted into the queue.
     public void StopAccepting()
     {
         lock (m_lock)
         {
-            m_accepting = false;
-            if (m_sessionClock.IsRunning)
+            if (m_accepting)
             {
-                m_sessionClock.Stop();
-                m_manifest.DurationMilliseconds = Math.Max(1, m_sessionClock.ElapsedMilliseconds);
+                m_accepting = false;
+                m_manifest.DurationMilliseconds = Math.Max(1L, (long)((Stopwatch.GetTimestamp() - m_startTimestamp)
+                    * (1000.0 / Stopwatch.Frequency)));
             }
             if (m_queue != null && !m_queue.IsAddingCompleted) m_queue.CompleteAdding();
         }
     }
 
+    // @brief: Drain and finalize the active recording and write its JSON manifest
+    // @return: Path to the finalized manifest, or the previous completed path when no session is active
     public string StopSession()
     {
         lock (m_stopLock) return StopSessionCore();
     }
 
+    // @brief: Perform session finalization while holding the stop lifecycle lock
+    // @return: Path to the finalized manifest
     private string StopSessionCore()
     {
         StopAccepting();
-        Task worker;
-        lock (m_lock) worker = m_worker;
-        if (worker == null) return LastCompletedPath;
-        try { worker.GetAwaiter().GetResult(); }
-        catch (Exception ex) { m_manifest.Error = "Recording worker failed: " + ex.Message; }
-        finally
-        {
-            lock (m_lock)
-            {
-                m_worker = null;
-                m_queue.Dispose(); m_queue = null;
-                LastRecording = m_manifest;
-            }
-        }
+        if (m_worker == null) return LastCompletedPath;
+        m_worker.GetAwaiter().GetResult();
+        RecordingManifest manifest;
         lock (m_lock)
         {
-            if (String.IsNullOrEmpty(m_manifest.Error))
-            {
-                try { PatchPlaybackTiming(); }
-                catch (Exception ex) { m_manifest.Error = "Could not set playback duration: " + ex.Message; }
-            }
-            string manifestPath = m_prefix + ".json";
-            File.WriteAllText(manifestPath, JsonSerializer.Serialize(m_manifest));
-            if (!String.IsNullOrEmpty(m_manifest.Error))
-                throw new IOException("Recording failed. Diagnostic manifest: " + manifestPath + "\n" + m_manifest.Error);
-            LastCompletedPath = manifestPath;
-            return manifestPath;
+            manifest = m_manifest;
+            LastRecording = manifest;
+            ResetSession();
         }
+
+        string manifestPath = m_prefix + ".json";
+        if (manifest.Error == null && manifest.Segments.Count == 0)
+            manifest.Error = "No frames were recorded.";
+        File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest));
+        if (manifest.Error != null)
+            throw new IOException("Recording failed. Diagnostic manifest: " + manifestPath + "\n" + manifest.Error);
+        LastCompletedPath = manifestPath;
+        return manifestPath;
     }
 
-    // AVI stores one constant frame interval. Set it from measured session
-    // duration so the recording plays back at the capture rate.
-    private void PatchPlaybackTiming()
+    // @brief: Release queue state and clear per-session recorder references
+    private void ResetSession()
     {
-        long frameCount = 0;
-        foreach (Segment segment in m_manifest.Segments) frameCount += segment.Frames;
-        if (frameCount <= 0 || m_manifest.DurationMilliseconds <= 0) return;
-
-        double framesPerSecond = frameCount * 1000.0 / m_manifest.DurationMilliseconds;
-        int rate = (int)Math.Max(1, Math.Min(Int32.MaxValue, Math.Round(framesPerSecond * 1000.0)));
-        int scale = 1000;
-        int microsecondsPerFrame = (int)Math.Max(1, Math.Min(Int32.MaxValue,
-            Math.Round(m_manifest.DurationMilliseconds * 1000.0 / frameCount)));
-
-        foreach (Segment segment in m_manifest.Segments)
-        {
-            using (FileStream stream = new FileStream(segment.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
-            using (BinaryWriter writer = new BinaryWriter(stream))
-            {
-                // Offsets in WriteHeader(): avih.dwMicroSecPerFrame, strh.dwScale, and strh.dwRate.
-                stream.Position = 32; writer.Write(microsecondsPerFrame);
-                stream.Position = 128; writer.Write(scale);
-                stream.Position = 132; writer.Write(rate);
-            }
-        }
+        m_queue.Dispose();
+        m_queue = null;
+        m_worker = null;
+        m_manifest = null;
     }
 
-    private void RecordLoop()
+    // @brief: Run the writer worker that drains queued frames and finalizes the last segment
+    // @param:
+    //      * started: Completion source signaled when the first video segment is ready or startup fails
+    // @details:
+    //      The worker owns Pylon file I/O, releases each frame reference after processing, accounts for
+    //      failed or abandoned frames, and closes the writer on every exit path.
+    private void RecordLoop(TaskCompletionSource<bool> started)
     {
         try
         {
-            foreach (byte[] frame in m_queue.GetConsumingEnumerable())
+            OpenSegment();
+            started.SetResult(true);
+            foreach (QueuedFrame frame in m_queue.GetConsumingEnumerable())
             {
-                byte[] jpeg;
-                try { jpeg = m_encoder(frame); if (jpeg == null || jpeg.Length == 0) throw new InvalidDataException("Empty encoded frame"); }
-                catch (Exception ex) { m_manifest.FailedFrames++; Console.WriteLine("[WARN] [VIDEO] Encoding skipped: " + ex.Message); continue; }
-
-                long chunkBytes = 8L + jpeg.Length + (jpeg.Length & 1);
-                if (chunkBytes + 256 + 24 > m_segmentLimit) { m_manifest.FailedFrames++; continue; }
-                if (m_stream.Position + chunkBytes + 8L + (m_index.Count + 1L) * 16 > m_segmentLimit)
-                { FinalizeSegment(); OpenSegment(); }
-
-                long start = m_stream.Position;
-                try
+                using (frame.Pixels)
                 {
-                    WriteFourCC("00dc"); m_writer.Write(jpeg.Length); m_writer.Write(jpeg);
-                    if ((jpeg.Length & 1) != 0) m_writer.Write((byte)0);
-                    m_index.Add(new AviIndexEntry { Offset = checked((uint)(start - m_moviDataOffset + 4)), Size = (uint)jpeg.Length });
-                }
-                catch (Exception ex)
-                {
-                    m_manifest.FailedFrames++;
-                    try { m_writer.Flush(); m_stream.SetLength(start); m_stream.Position = start; }
-                    catch (Exception rollback) { throw new IOException("Frame write and rollback failed: " + ex.Message, rollback); }
-                    Console.WriteLine("[WARN] [VIDEO] Write skipped after rollback: " + ex.Message);
+                    try { WriteFrame(frame); }
+                    catch (Exception ex)
+                    {
+                        lock (m_lock) m_manifest.FailedFrames++;
+                        if (m_videoWriter == null || !m_videoWriter.IsOpen) throw;
+                        Console.WriteLine("[WARN] [VIDEO] Pylon skipped a frame: " + ex.Message);
+                    }
                 }
             }
             FinalizeSegment();
@@ -217,89 +290,96 @@ public sealed class VideoRecorder : IDisposable
         catch (Exception ex)
         {
             m_manifest.Error = ex.Message;
-            lock (m_lock) { m_accepting = false; if (!m_queue.IsAddingCompleted) m_queue.CompleteAdding(); }
-            while (m_queue.TryTake(out _)) m_manifest.FailedFrames++;
+            lock (m_lock)
+            {
+                m_writerFaulted = true;
+                if (!m_queue.IsAddingCompleted) m_queue.CompleteAdding();
+            }
+            started.TrySetException(ex);
+            long abandoned = 0;
+            while (m_queue.TryTake(out QueuedFrame frame))
+            {
+                frame.Pixels.Dispose();
+                abandoned++;
+            }
+            lock (m_lock) m_manifest.FailedFrames += abandoned;
         }
         finally
         {
             try { CloseSegment(); }
-            catch (Exception ex) { m_manifest.Error = (m_manifest.Error ?? "") + " Close failed: " + ex.Message; }
+            catch (Exception ex)
+            {
+                m_manifest.Error = (m_manifest.Error ?? "") + " Pylon close failed: " + ex.Message;
+            }
         }
     }
 
+    // @brief: Write one queued frame and roll over to a new segment when the byte limit is reached
+    // @param:
+    //      * frame: Frame buffer and capture offset to write
+    private void WriteFrame(QueuedFrame frame)
+    {
+        if (m_captureOffsets.Count > 0 && m_videoWriter.ImageDataBytesWritten >= m_segmentLimit)
+        {
+            FinalizeSegment();
+            OpenSegment();
+        }
+
+        m_videoWriter.Write(frame.Pixels.Buffer, PixelType.BGR8packed,
+            Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, 0, ImageOrientation.TopDown);
+        m_captureOffsets.Add(frame.CaptureOffsetMicroseconds);
+    }
+
+    // @brief: Create and initialize the next Pylon MP4 segment
     private void OpenSegment()
     {
-        m_path = m_prefix + "_part" + (m_manifest.Segments.Count + 1).ToString("D4") + ".avi";
-        m_index.Clear();
-        try { m_stream = m_open(m_path); m_writer = new BinaryWriter(m_stream); WriteHeader(); }
-        catch { CloseSegment(); throw; }
-    }
-
-    private void FinalizeSegment()
-    {
-        if (m_writer == null) return;
+        m_path = m_prefix + "_part" + (m_manifest.Segments.Count + 1).ToString("D4") + ".mp4";
+        var writer = new VideoWriter();
         try
         {
-            long moviEnd = m_stream.Position;
-            WriteFourCC("idx1"); m_writer.Write(checked(m_index.Count * 16));
-            foreach (AviIndexEntry entry in m_index)
-            { WriteFourCC("00dc"); m_writer.Write(0x10); m_writer.Write(entry.Offset); m_writer.Write(entry.Size); }
-            long fileEnd = m_stream.Position;
-            PatchInt32(m_moviSizeOffset, checked((int)(moviEnd - m_moviSizeOffset - 4)));
-            PatchInt32(m_frameCountOffset, m_index.Count); PatchInt32(m_streamLengthOffset, m_index.Count);
-            PatchInt32(m_riffSizeOffset, checked((int)(fileEnd - 8)));
-            m_writer.Flush();
-            int frames = m_index.Count;
-            CloseSegment();
-            m_manifest.Segments.Add(new Segment { Path = m_path, Frames = frames });
+            if (!VideoWriter.IsSupported)
+                throw new NotSupportedException("The installed Pylon video writer libraries are unavailable.");
+            writer.Create(m_path, m_manifest.PlaybackFramesPerSecond, PixelType.BGR8packed,
+                Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, Config.VIDEO_WRITER_QUALITY);
+            m_captureOffsets = new List<long>();
+            m_videoWriter = writer;
         }
-        finally { CloseSegment(); }
+        catch
+        {
+            writer.Dispose();
+            throw;
+        }
     }
 
+    // @brief: Close the current segment and add its path, frame count, and timestamps to the manifest
+    private void FinalizeSegment()
+    {
+        CloseSegment();
+        if (m_captureOffsets.Count > 0)
+        {
+            if (new FileInfo(m_path).Length == 0)
+                throw new IOException("Pylon produced an empty video segment: " + m_path);
+            m_manifest.Segments.Add(new Segment
+            {
+                Path = m_path,
+                Frames = m_captureOffsets.Count,
+                CaptureOffsetsMicroseconds = m_captureOffsets
+            });
+        }
+        else if (File.Exists(m_path))
+            File.Delete(m_path);
+    }
+
+    // @brief: Close and dispose the active Pylon video writer when one is open
     private void CloseSegment()
     {
-        try { if (m_writer != null) m_writer.Dispose(); }
-        finally { m_writer = null; try { if (m_stream != null) m_stream.Dispose(); } finally { m_stream = null; } }
+        VideoWriter writer = m_videoWriter;
+        if (writer == null) return;
+        m_videoWriter = null;
+        try { writer.Close(); }
+        finally { writer.Dispose(); }
     }
 
-    private void WriteHeader()
-    {
-        WriteFourCC("RIFF"); m_riffSizeOffset = m_stream.Position; m_writer.Write(0); WriteFourCC("AVI ");
-        WriteFourCC("LIST"); long hdrlSize = m_stream.Position; m_writer.Write(0); WriteFourCC("hdrl");
-        WriteFourCC("avih"); m_writer.Write(56);
-        m_writer.Write(1000000 / Config.VIDEO_FRAME_RATE); m_writer.Write(0); m_writer.Write(0); m_writer.Write(0x10);
-        m_frameCountOffset = m_stream.Position; m_writer.Write(0); m_writer.Write(0); m_writer.Write(1); m_writer.Write(0);
-        m_writer.Write(Config.IMAGE_WIDTH); m_writer.Write(Config.IMAGE_HEIGHT); m_writer.Write(0); m_writer.Write(0); m_writer.Write(0); m_writer.Write(0);
-        WriteFourCC("LIST"); long strlSize = m_stream.Position; m_writer.Write(0); WriteFourCC("strl");
-        WriteFourCC("strh"); m_writer.Write(56); WriteFourCC("vids"); WriteFourCC("MJPG");
-        m_writer.Write(0); m_writer.Write((short)0); m_writer.Write((short)0); m_writer.Write(0); m_writer.Write(1); m_writer.Write(Config.VIDEO_FRAME_RATE);
-        m_writer.Write(0); m_streamLengthOffset = m_stream.Position; m_writer.Write(0); m_writer.Write(0); m_writer.Write(-1); m_writer.Write(0);
-        m_writer.Write((short)0); m_writer.Write((short)0); m_writer.Write((short)Config.IMAGE_WIDTH); m_writer.Write((short)Config.IMAGE_HEIGHT);
-        WriteFourCC("strf"); m_writer.Write(40); m_writer.Write(40); m_writer.Write(Config.IMAGE_WIDTH); m_writer.Write(Config.IMAGE_HEIGHT);
-        m_writer.Write((short)1); m_writer.Write((short)24); WriteFourCC("MJPG"); m_writer.Write(0); m_writer.Write(0); m_writer.Write(0); m_writer.Write(0); m_writer.Write(0);
-        long afterStrl = m_stream.Position; PatchInt32(strlSize, checked((int)(afterStrl - strlSize - 4)));
-        PatchInt32(hdrlSize, checked((int)(afterStrl - hdrlSize - 4)));
-        WriteFourCC("LIST"); m_moviSizeOffset = m_stream.Position; m_writer.Write(0); WriteFourCC("movi"); m_moviDataOffset = m_stream.Position;
-    }
-
-    private static byte[] EncodeJpeg(byte[] p_bgrFrame)
-    {
-        using (Bitmap bitmap = new Bitmap(Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, PixelFormat.Format24bppRgb))
-        {
-            BitmapData data = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.WriteOnly, bitmap.PixelFormat);
-            try
-            {
-                int rowBytes = Config.IMAGE_WIDTH * 3;
-                for (int row = 0; row < Config.IMAGE_HEIGHT; row++)
-                    Marshal.Copy(p_bgrFrame, row * rowBytes, IntPtr.Add(data.Scan0, row * data.Stride), rowBytes);
-            }
-            finally { bitmap.UnlockBits(data); }
-            using (MemoryStream output = new MemoryStream()) { bitmap.Save(output, ImageFormat.Jpeg); return output.ToArray(); }
-        }
-    }
-
-    private void PatchInt32(long p_offset, int p_value) { long current = m_stream.Position; m_stream.Position = p_offset; m_writer.Write(p_value); m_stream.Position = current; }
-    private void WriteFourCC(string p_value) { m_writer.Write((byte)p_value[0]); m_writer.Write((byte)p_value[1]); m_writer.Write((byte)p_value[2]); m_writer.Write((byte)p_value[3]); }
+    // @brief: Finalize any active recording and release recorder resources
     public void Dispose() { StopSession(); }
-    private struct AviIndexEntry { public uint Offset; public uint Size; }
 }

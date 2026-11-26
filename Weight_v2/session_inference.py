@@ -20,7 +20,7 @@ from Weight_v2.utils import utils as pipeline
 def _recording_segments(recording):
     path = Path(recording).resolve()
     if path.suffix.lower() != ".json":
-        return [(path, None)], 0, False
+        return [(path, None, None)], 0, False
 
     manifest = json.loads(path.read_text(encoding="utf-8-sig"))
     if manifest.get("Version") != 1:
@@ -28,6 +28,7 @@ def _recording_segments(recording):
     if manifest.get("Error"):
         raise ValueError("Recording could not finalize: " + manifest["Error"])
     segments = []
+    previous_offset = -1
     for segment in manifest.get("Segments", []):
         video = Path(segment["Path"])
         if not video.is_absolute():
@@ -35,9 +36,20 @@ def _recording_segments(recording):
         expected = int(segment["Frames"])
         if expected < 0:
             raise ValueError("Negative expected frame count")
-        segments.append((video, expected))
+        offsets = segment.get("CaptureOffsetsMicroseconds")
+        if offsets is not None:
+            if not isinstance(offsets, list) or len(offsets) != expected:
+                raise ValueError("Capture timestamps do not match frame count: {}".format(video))
+            for offset in offsets:
+                if type(offset) is not int or offset < 0 or offset < previous_offset:
+                    raise ValueError("Invalid capture timestamp order: {}".format(video))
+                previous_offset = offset
+        segments.append((video, expected, offsets))
     if not segments:
         raise ValueError("Recording contains no finalized segments")
+    if any(offsets is not None for _, _, offsets in segments) and any(
+            offsets is None for _, _, offsets in segments):
+        raise ValueError("Recording has capture timestamps for only some segments")
     dropped = sum(int(manifest.get(key, 0)) for key in
                   ("Dropped", "CaptureFailures", "FailedFrames"))
     return segments, dropped, True
@@ -132,6 +144,8 @@ def analyze_recording(recording, model=None, capture_factory=cv2.VideoCapture):
     sampled_expected = processed = skipped = 0
     frame_features = []
     known = True
+    capture_interval_us = max(1, round(pipeline.VIDEO_CUT_TIME * 1_000_000))
+    last_capture_bucket = -1
 
     def process_frame(frame_index, frame, path, segment_number):
         nonlocal processed, skipped
@@ -161,34 +175,52 @@ def analyze_recording(recording, model=None, capture_factory=cv2.VideoCapture):
             print("[WARN] Skipped sampled frame {} in {}: {}".format(frame_index, path, exc),
                   file=sys.stderr)
 
-    for segment_number, (path, physical_expected) in enumerate(segments, start=1):
+    for segment_number, (path, physical_expected, offsets) in enumerate(segments, start=1):
+        sample_positions = None
+        if offsets is not None:
+            # Use the first recorded frame in each elapsed capture interval.
+            # Keep the same timeline across MP4 segment boundaries and gaps.
+            sample_positions = set()
+            for frame_index, offset in enumerate(offsets):
+                bucket = offset // capture_interval_us
+                if bucket > last_capture_bucket:
+                    sample_positions.add(frame_index)
+                    last_capture_bucket = bucket
+            sampled_expected += len(sample_positions)
+
         capture = capture_factory(str(path))
         if not capture.isOpened():
             capture.release()
             if physical_expected is None:
                 raise RuntimeError("Could not open recording: " + str(path))
-            # The manifest has frame count but not FPS, so the v2 sample count
-            # cannot be derived safely when the segment itself will not open.
-            known = False
+            if sample_positions is None:
+                known = False
+            else:
+                skipped += len(sample_positions)
             continue
         try:
-            fps = capture.get(cv2.CAP_PROP_FPS)
-            if not math.isfinite(fps) or fps <= 0:
-                raise ValueError("FPS is invalid for recording: {}".format(path))
-            interval = max(1, round(fps * pipeline.VIDEO_CUT_TIME))
-            if physical_expected is None:
-                known = False
-                reported = capture.get(cv2.CAP_PROP_FRAME_COUNT)
-                physical_expected = int(reported) if math.isfinite(reported) and reported > 0 else None
-            if physical_expected is not None:
-                sampled_expected += len(range(0, physical_expected, interval))
+            if sample_positions is None:
+                fps = capture.get(cv2.CAP_PROP_FPS)
+                if not math.isfinite(fps) or fps <= 0:
+                    raise ValueError("FPS is invalid for recording: {}".format(path))
+                interval = max(1, round(fps * pipeline.VIDEO_CUT_TIME))
+                if physical_expected is None:
+                    known = False
+                    reported = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+                    physical_expected = int(reported) if math.isfinite(reported) and reported > 0 else None
+                if physical_expected is not None:
+                    sample_positions = range(0, physical_expected, interval)
+                    sampled_expected += len(sample_positions)
+
             frame_index = consecutive_failures = 0
             while physical_expected is None or frame_index < physical_expected:
+                should_sample = (frame_index in sample_positions if sample_positions is not None
+                                 else frame_index % interval == 0)
                 ok, frame = capture.read()
                 if not ok:
                     if physical_expected is None:
                         break
-                    if frame_index % interval == 0:
+                    if should_sample:
                         skipped += 1
                     frame_index += 1
                     consecutive_failures += 1
@@ -200,7 +232,7 @@ def analyze_recording(recording, model=None, capture_factory=cv2.VideoCapture):
                 consecutive_failures = 0
                 current = frame_index
                 frame_index += 1
-                if current % interval:
+                if not should_sample:
                     continue
                 try:
                     # test.py persists sampled images as JPEG before inference.

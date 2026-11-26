@@ -25,6 +25,8 @@ public sealed class AIHelper
     private static Task s_offlineInitializationTask;
     private static bool s_offlineStopRequested;
     public static bool IsLiveReady { get { return s_liveReady; } }
+
+    // @brief: Mark the live AI process as unavailable for new sessions
     public static void MarkUnavailable() { s_liveReady = false; }
     public sealed class VideoInferenceResult
     {
@@ -40,12 +42,21 @@ public sealed class AIHelper
         public double[] AverageWeights { get; set; }
     }
 
+    // @brief:  Run the offline inference analysis
+    // @param:
+    //      * p_videoPath:  Path to recorded video
+    // @return: The VideoInferenceResult
     public static VideoInferenceResult runVideoInference(string p_videoPath)
     {
         if (String.IsNullOrWhiteSpace(p_videoPath) || !File.Exists(p_videoPath))
             throw new FileNotFoundException("The finalized recording could not be found.", p_videoPath);
+        
+        // Initialize and warm-up the offline worker
+        // Assign the response on TaskCompletionSource
         InitializeOfflineWorker();
         TaskCompletionSource<string> response;
+
+        // Guard the access to offline worker in order to prevent concurrent access
         lock (s_offlineLock)
         {
             if (s_offlineProcess == null || s_offlineProcess.HasExited)
@@ -53,6 +64,8 @@ public sealed class AIHelper
             if (s_offlineResponse != null)
                 throw new InvalidOperationException("The offline inference worker is already processing a recording.");
             response = s_offlineResponse = new TaskCompletionSource<string>();
+
+            // Write the recorded video path to the stdin of the offline worker and flush it
             try { s_offlineProcess.StandardInput.WriteLine("offline_signal_inference|" + Path.GetFullPath(p_videoPath)); s_offlineProcess.StandardInput.Flush(); }
             catch { s_offlineResponse = null; throw; }
         }
@@ -70,13 +83,17 @@ public sealed class AIHelper
         }
         if (resultLine.StartsWith("OFFLINE_ERROR|"))
             throw new InvalidOperationException("Video inference failed: " + resultLine.Substring("OFFLINE_ERROR|".Length));
+
+        // Retrieve the returned result of the video result in form of VideoInferenceResult
         return ParseVideoResult(resultLine);
     }
 
+    // @brief: Initialize the offline inference model asynchronously (non-blocking) by creating a Window Process
     public static Task InitializeOfflineWorkerAsync()
     {
         lock (s_offlineLock)
         {
+            // Return early if the corresponding process already up-and-running
             if (s_offlineProcess != null && !s_offlineProcess.HasExited &&
                 s_offlineReady != null && s_offlineReady.Task.Status == TaskStatus.RanToCompletion)
                 return Task.CompletedTask;
@@ -85,6 +102,8 @@ public sealed class AIHelper
                 return s_offlineInitializationTask;
 
             s_offlineStopRequested = false;
+
+            // Run the initialization asynchronously
             s_offlineInitializationTask = Task.Run((Action)InitializeOfflineWorkerCore);
             s_offlineInitializationTask.ContinueWith(task =>
             {
@@ -102,6 +121,7 @@ public sealed class AIHelper
         InitializeOfflineWorkerAsync().GetAwaiter().GetResult();
     }
 
+    // @brief: Start the offline inference worker and wait until it reports readiness
     private static void InitializeOfflineWorkerCore()
     {
         lock (s_offlineLock)
@@ -169,6 +189,8 @@ public sealed class AIHelper
         s_offlineReady.Task.GetAwaiter().GetResult();
     }
 
+    // @brief: Return captured diagnostic output from the offline worker
+    // @return: The worker's stderr output, or a message when none was captured
     private static string GetOfflineExitDetails()
     {
         string output;
@@ -176,6 +198,7 @@ public sealed class AIHelper
         return String.IsNullOrWhiteSpace(output) ? "No Python stderr was captured." : Environment.NewLine + output;
     }
 
+    // @brief: Stop the offline inference worker and release its process resources
     public static void StopOfflineWorker()
     {
         Process process;
@@ -200,6 +223,10 @@ public sealed class AIHelper
         }
     }
 
+    // @brief: Parse and validate the machine-readable summary emitted by offline inference
+    // @param:
+    //      * line: The VIDEO_RESULT summary line
+    // @return: The validated VideoInferenceResult
     public static VideoInferenceResult ParseVideoResult(string line)
     {
         if (line == null || !line.StartsWith("VIDEO_RESULT|")) throw new FormatException("Missing video summary.");
@@ -228,6 +255,7 @@ public sealed class AIHelper
         };
     }
 
+    // @brief: Launch the live Python AI process with the configured IPC arguments
     public static void initializeAI()
     {
         RequireFile(Config.s_pythonEnvPath, "Python environment executable");
@@ -289,6 +317,10 @@ public sealed class AIHelper
          Common.pythonProcess.BeginErrorReadLine();
     }
 
+    // @brief: Verify that a required file exists before launching an AI process
+    // @param:
+    //      * path: The full path to the required file
+    //      * description: A human-readable name used in the missing-file error
     private static void RequireFile(string path, string description)
     {
         if (!File.Exists(path))
@@ -297,6 +329,7 @@ public sealed class AIHelper
 
 
 
+    // @brief: Warm up the live AI model and mark it ready for session inference
     public static void warmUpAI()
     {
         s_liveReady = false;
@@ -314,6 +347,7 @@ public sealed class AIHelper
         }
     }
 
+    // @brief: Terminate the live Python process and confirm it has exited
     private static void StopPythonProcess()
     {
         Process process = Common.pythonProcess;
@@ -336,12 +370,18 @@ public sealed class AIHelper
         }
     }
 
+    // @brief: Check whether a process has exited, treating an unavailable process state as exited
+    // @param:
+    //      * process: The process to check
+    // @return: True if the process has exited or its state is unavailable
     private static bool HasExited(Process process)
     {
         try { return process.HasExited; }
         catch (InvalidOperationException) { return true; }
     }
 
+    // @brief: Format the live Python process exit code and captured diagnostic output
+    // @return: A diagnostic description of the Python process exit
     private static string GetPythonExitDetails()
     {
         string output;
@@ -360,6 +400,7 @@ public sealed class AIHelper
         return details;
     }
 
+    // @brief: Send configured warm-up images through the live shared-memory inference protocol
     private static void WarmUpCore()
     {
         // Ensure IPC resources are initialized before using Common.mmf and events.
@@ -429,6 +470,7 @@ public sealed class AIHelper
     }
 
 
+    // @brief: Terminate the live AI process during application shutdown
     public static void aiClosing()
     {
         if (Common.pythonProcess != null && !Common.pythonProcess.HasExited)

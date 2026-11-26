@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Linq;
@@ -23,6 +24,7 @@ namespace Stone_Application.IPC
         private bool m_sessionActive;
         private long m_sessionToken;
         private long m_sent, m_received, m_failed;
+        private long m_lastIpcCaptureTimestamp;
         private readonly Func<bool> m_isAiReady;
         private readonly Action m_stopAi;
         private readonly int m_stopTimeout;
@@ -32,7 +34,7 @@ namespace Stone_Application.IPC
         public long FailedCount { get { lock (m_ringLock) return m_failed; } }
         public bool IsCurrentSession(long token) { lock (m_ringLock) return m_sessionActive && token == m_sessionToken; }
         private readonly ManualResetEventSlim m_noInferenceInFlight = new ManualResetEventSlim(true);
-        private readonly BlockingCollection<CaptureFrame> m_captureQueue = new BlockingCollection<CaptureFrame>(2);
+        private readonly BlockingCollection<CaptureFrame> m_captureQueue = new BlockingCollection<CaptureFrame>(Config.IPC_CAPTURE_QUEUE_CAPACITY);
 
         private IPCServices() : this("", () => AIHelper.IsLiveReady && Common.pythonProcess != null && !Common.pythonProcess.HasExited,
             StopLiveAi, Config.AI_STOP_TIMEOUT_MS) { }
@@ -50,23 +52,48 @@ namespace Stone_Application.IPC
 
         private sealed class CaptureFrame
         {
-            public byte[] Image;
+            public PooledFrameBuffer Image;
             public long SessionToken;
         }
 
-        // Keep capture independent of the memory-mapped write. A single bounded
-        // worker publishes frames in order and drops the oldest pending frame if
-        // publication falls behind, so memory use stays bounded.
-        public bool QueueCaptureFrame(byte[] image, long sessionToken)
+        // Reserve a monotonic 10 FPS IPC cadence independently of the camera and
+        // recording cadence. The timestamp is reset for every session.
+        public bool TryReserveCaptureFrame(long sessionToken)
+        {
+            long now = Stopwatch.GetTimestamp();
+            long intervalTicks = Math.Max(1L,
+                (long)Stopwatch.Frequency * Config.IPC_CAPTURE_INTERVAL_MS / 1000L);
+            lock (m_ringLock)
+            {
+                if (!m_sessionActive || sessionToken != m_sessionToken)
+                    return false;
+                if (m_lastIpcCaptureTimestamp != 0 &&
+                    now - m_lastIpcCaptureTimestamp < intervalTicks)
+                    return false;
+                m_lastIpcCaptureTimestamp = now;
+                return true;
+            }
+        }
+
+        // Keep shared-memory writes off the camera thread. The bounded worker
+        // drops the oldest pending frame if publication falls behind.
+        public bool QueueCaptureFrame(PooledFrameBuffer image, long sessionToken)
         {
             if (image == null || image.Length != Config.IMAGE_BYTE_COUNT)
                 throw new ArgumentException("Camera frame size does not match the configured image dimensions.", nameof(image));
             if (!IsCurrentSession(sessionToken)) return false;
             var frame = new CaptureFrame { Image = image, SessionToken = sessionToken };
-            if (m_captureQueue.TryAdd(frame)) return true;
-            CaptureFrame discarded;
-            m_captureQueue.TryTake(out discarded);
-            return m_captureQueue.TryAdd(frame);
+            image.AddReference();
+            bool accepted = false;
+            try
+            {
+                accepted = m_captureQueue.TryAdd(frame);
+                if (accepted) return true;
+                if (m_captureQueue.TryTake(out CaptureFrame discarded)) discarded.Image.Dispose();
+                accepted = m_captureQueue.TryAdd(frame);
+                return accepted;
+            }
+            finally { if (!accepted) image.Dispose(); }
         }
 
         private void CapturePublishLoop()
@@ -75,6 +102,7 @@ namespace Stone_Application.IPC
             {
                 try { captureFrame(frame.Image, frame.SessionToken); }
                 catch (Exception ex) { Console.WriteLine("[ERROR] [IPC] Frame publication failed: " + ex.Message); }
+                finally { frame.Image.Dispose(); }
             }
         }
 
@@ -148,6 +176,7 @@ namespace Stone_Application.IPC
                 m_nextSlot = 0; m_latestSlot = -1;
                 m_sessionToken++;
                 m_sent = m_received = m_failed = 0;
+                m_lastIpcCaptureTimestamp = 0;
                 m_sessionActive = true;
             }
         }
@@ -199,7 +228,7 @@ namespace Stone_Application.IPC
                 return m_sessionActive;
         }
 
-        public bool captureFrame(byte[] p_image, long sessionToken)
+        public bool captureFrame(PooledFrameBuffer p_image, long sessionToken)
         {
             if (p_image == null || p_image.Length != Config.IMAGE_BYTE_COUNT)
                 throw new ArgumentException("Camera frame size does not match the configured image dimensions.", nameof(p_image));
@@ -223,8 +252,7 @@ namespace Stone_Application.IPC
 
                 long offset = Config.WRITE_OFFSET + Config.IMAGE_BUFFER_HEADER_SIZE + (long)slot * Config.IMAGE_BYTE_COUNT;
                 using (MemoryMappedViewStream stream = Common.mmf.CreateViewStream(offset, Config.IMAGE_BYTE_COUNT))
-                using (BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, false))
-                    writer.Write(p_image);
+                    stream.Write(p_image.Buffer, 0, Config.IMAGE_BYTE_COUNT);
 
                 m_latestSlot = slot;
                 m_nextSlot = (slot + 1) % Config.IMAGE_BUFFER_SLOT_COUNT;
