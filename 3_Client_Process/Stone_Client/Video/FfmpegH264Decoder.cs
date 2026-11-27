@@ -70,13 +70,19 @@ namespace Stone_Client.Video
         /// <summary>
         /// Low-latency demux and decode of MPEG-TS on stdin. Probing is kept short
         /// (about one keyframe) so the first picture appears quickly.
+        ///
+        /// "-vsync passthrough" emits each decoded frame exactly once. Raw video
+        /// output otherwise defaults to constant frame rate, and when the server
+        /// skips ahead to a later keyframe the timestamp jump would make FFmpeg
+        /// emit a burst of duplicate frames to fill the gap.
         /// </summary>
         internal static string BuildArguments(int p_width, int p_height)
         {
             return "-hide_banner -loglevel error -nostdin " +
                    "-fflags nobuffer -flags low_delay -probesize 262144 -analyzeduration 500000 " +
                    "-f mpegts -i pipe:0 -map 0:v:0 -an " +
-                   "-vf scale=" + p_width + ":" + p_height + " -pix_fmt bgr24 -f rawvideo pipe:1";
+                   "-vf scale=" + p_width + ":" + p_height + " -vsync passthrough " +
+                   "-pix_fmt bgr24 -f rawvideo pipe:1";
         }
 
         /// <summary>Feeds transport bytes in order. Blocks while FFmpeg is busy.</summary>

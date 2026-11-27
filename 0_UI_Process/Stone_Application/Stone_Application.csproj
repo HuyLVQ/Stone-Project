@@ -229,6 +229,7 @@
     <Compile Include="Networking\Iot\FfmpegH264Encoder.cs" />
     <Compile Include="Networking\Iot\IotProtocol.cs" />
     <Compile Include="Networking\Iot\IotServer.cs" />
+    <Compile Include="Networking\Iot\TsStreamHeaders.cs" />
     <Compile Include="Observers\IotImageObserver.cs" />
     <Compile Include="Observers\UIImageObserver.cs" />
     <Compile Include="Observers\DBObserver.cs" />

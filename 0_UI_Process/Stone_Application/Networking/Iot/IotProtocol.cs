@@ -236,7 +236,7 @@ namespace Stone_Application.Networking.Iot
             return -1;
         }
 
-        private static int TsPid(byte[] packet, int offset)
+        internal static int TsPid(byte[] packet, int offset)
         {
             return ((packet[offset + 1] & 0x1F) << 8) | packet[offset + 2];
         }

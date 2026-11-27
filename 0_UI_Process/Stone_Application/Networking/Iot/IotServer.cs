@@ -36,6 +36,7 @@ namespace Stone_Application.Networking.Iot
         private string m_ffmpegPath;
         private FfmpegH264Encoder m_h264Encoder;
         private bool m_h264EncoderAttempted;
+        private readonly TsStreamHeaders m_streamHeaders = new TsStreamHeaders();   // Guarded by m_publishLock
 
         public static IotServer Instance { get { return s_instance.Value; } }
 
@@ -208,14 +209,24 @@ namespace Stone_Application.Networking.Iot
                 IotClientConnection existing;
                 if (m_clients.TryGetValue(clientId, out existing))
                 {
-                    if (String.Equals(existing.Address, addressText, StringComparison.OrdinalIgnoreCase) &&
-                        existing.ImageEncoding == negotiatedEncoding)
+                    if (existing.ImageEncoding == negotiatedEncoding)
                     {
+                        // A client on several networks (or on this machine, via loopback)
+                        // can reach us from more than one address. Recreating the
+                        // connection would drop its live stream and any pending result,
+                        // so keep it and dial the newest address from now on.
+                        if (!String.Equals(existing.Address, addressText, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Console.WriteLine("[INFO] [IOT] Client " + clientId + " moved from " + existing.Address +
+                                " to " + addressText + ".");
+                            existing.UpdateAddress(addressText);
+                        }
                         existing.RefreshLease();
-                        Console.WriteLine("[INFO] [IOT] Refreshed client " + clientId + " at " + addressText + ".");
                         return negotiatedEncoding;
                     }
 
+                    // A different encoding needs a fresh connection and, for H.264,
+                    // a stream that starts at a keyframe.
                     IotClientConnection removed;
                     if (m_clients.TryRemove(clientId, out removed)) removed.Dispose();
                 }
@@ -255,13 +266,17 @@ namespace Stone_Application.Networking.Iot
         {
             lock (m_publishLock)
             {
+                // Track the stream's PAT/PMT even between sessions: the encoder keeps
+                // running, and the next session's first keyframe may need them.
+                m_streamHeaders.Observe(transportChunk);
                 if (m_mode != DeliveryMode.Images) return;
                 // Each client frames its own envelope: one that is resyncing to a
                 // keyframe may send only the tail of this chunk.
                 long sequence = ++m_sequence;
+                byte[] headers = m_streamHeaders.Packets;
                 foreach (IotClientConnection client in m_clients.Values)
                 {
-                    if (client.UsesH264) client.QueueVideoChunk(transportChunk, m_sessionToken, sequence);
+                    if (client.UsesH264) client.QueueVideoChunk(transportChunk, headers, m_sessionToken, sequence);
                 }
             }
         }
@@ -286,7 +301,11 @@ namespace Stone_Application.Networking.Iot
 
         public void Stop()
         {
-            lock (m_publishLock) m_mode = DeliveryMode.Stopped;
+            lock (m_publishLock)
+            {
+                m_mode = DeliveryMode.Stopped;
+                m_streamHeaders.Reset();        // The encoder below is discarded too
+            }
             lock (m_lifecycleLock)
             {
                 if (m_listener == null) return;

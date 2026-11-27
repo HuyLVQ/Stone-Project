@@ -30,7 +30,7 @@ namespace Stone_Application.Networking.Iot
         }
 
         private readonly string m_clientId;
-        private readonly string m_address;
+        private volatile string m_address;
         private readonly CancellationTokenSource m_stop = new CancellationTokenSource();
         private readonly Task m_worker;
         private readonly object m_queueLock = new object();
@@ -58,6 +58,17 @@ namespace Stone_Application.Networking.Iot
         internal IotImageEncoding ImageEncoding { get; private set; }
         internal bool UsesH264 { get { return ImageEncoding == IotImageEncoding.H264; } }
 
+        /// <summary>
+        /// Points later connection attempts at a new address. The current TCP
+        /// connection and everything queued (including an undelivered result)
+        /// are kept; if the old address stops working, the next send fails and
+        /// the reconnect dials the new one.
+        /// </summary>
+        internal void UpdateAddress(string address)
+        {
+            m_address = address;
+        }
+
         internal void RefreshLease()
         {
             Interlocked.Exchange(ref m_lastSeenUtcTicks, DateTime.UtcNow.Ticks);
@@ -84,7 +95,9 @@ namespace Stone_Application.Networking.Iot
         /// keyframe (new client, new session, overflow or failed send), chunks
         /// are skipped until one contains a keyframe, which is sent from there.
         /// </summary>
-        internal void QueueVideoChunk(byte[] transportChunk, long sessionToken, long sequence)
+        /// <param name="streamHeaders">The stream's latest PAT and PMT packets (or null),
+        /// sent ahead of the keyframe when the chunk does not start with them.</param>
+        internal void QueueVideoChunk(byte[] transportChunk, byte[] streamHeaders, long sessionToken, long sequence)
         {
             lock (m_queueLock)
             {
@@ -102,10 +115,13 @@ namespace Stone_Application.Networking.Iot
                 {
                     int offset = IotProtocol.FindKeyframeOffset(transportChunk);
                     if (offset < 0) return;
-                    if (offset > 0)
+                    bool startsWithPat = IotProtocol.TsPid(transportChunk, offset) == 0;
+                    int prefix = startsWithPat || streamHeaders == null ? 0 : streamHeaders.Length;
+                    if (offset > 0 || prefix > 0)
                     {
-                        data = new byte[transportChunk.Length - offset];
-                        Buffer.BlockCopy(transportChunk, offset, data, 0, data.Length);
+                        data = new byte[prefix + transportChunk.Length - offset];
+                        if (prefix > 0) Buffer.BlockCopy(streamHeaders, 0, data, 0, prefix);
+                        Buffer.BlockCopy(transportChunk, offset, data, prefix, transportChunk.Length - offset);
                     }
                     m_videoNeedsKeyframe = false;
                 }
