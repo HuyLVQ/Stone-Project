@@ -17,6 +17,9 @@ namespace Stone_Client
         public const int MAX_LOG_ROWS = 2000;                           // On-screen log is trimmed beyond this
         public const int HANDSHAKE_REPLY_TIMEOUT_MS = 2000;             // How long one handshake waits for SERVER CONFIRMED
         public const int SEARCH_RETRY_SECONDS = 3;                      // Handshake cadence while no server is confirmed
+        public const int VIDEO_WIDTH = 1920;                            // H.264 frames are decoded at the server's camera size
+        public const int VIDEO_HEIGHT = 1200;
+        public const int MAX_DECODER_STARTS_PER_SESSION = 3;            // FFmpeg restarts allowed after a crash
 
         public static string ClientId { get; private set; }
         public static IPAddress ServerAddress { get; private set; }     // null = broadcast discovery
@@ -26,6 +29,7 @@ namespace Stone_Client
         public static int HandshakeIntervalSeconds { get; private set; } = 10;
         public static int OfflineAfterMissedHandshakes { get; private set; } = 3;
         public static string LogDirectory { get; private set; }
+        public static string FfmpegPath { get; private set; }           // null = not found; H.264 unavailable
 
         /// <summary>
         /// Reads App.config. Invalid values fall back to defaults; the returned
@@ -81,7 +85,43 @@ namespace Stone_Client
                 ? logDirectory
                 : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, logDirectory);
 
+            FfmpegPath = FindFfmpeg(Setting("FfmpegPath"), warnings);
+
             return warnings;
+        }
+
+        /// <summary>
+        /// Same search order as the server: the FfmpegPath setting, then
+        /// STONE_FFMPEG_PATH, then ffmpeg.exe next to the executable, then PATH.
+        /// </summary>
+        private static string FindFfmpeg(string p_configured, List<string> p_warnings)
+        {
+            if (!String.IsNullOrWhiteSpace(p_configured))
+            {
+                string configured = p_configured.Trim();
+                if (!Path.IsPathRooted(configured))
+                    configured = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, configured);
+                if (File.Exists(configured)) return configured;
+                p_warnings.Add("FfmpegPath '" + p_configured + "' does not exist; searching the usual locations instead.");
+            }
+
+            string environment = Environment.GetEnvironmentVariable("STONE_FFMPEG_PATH");
+            if (!String.IsNullOrWhiteSpace(environment) && File.Exists(environment)) return environment;
+
+            string local = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg.exe");
+            if (File.Exists(local)) return local;
+
+            foreach (string directory in (Environment.GetEnvironmentVariable("PATH") ?? String.Empty).Split(Path.PathSeparator))
+            {
+                if (String.IsNullOrWhiteSpace(directory)) continue;
+                try
+                {
+                    string candidate = Path.Combine(directory.Trim().Trim('"'), "ffmpeg.exe");
+                    if (File.Exists(candidate)) return candidate;
+                }
+                catch (ArgumentException) { }       // Malformed PATH entry
+            }
+            return null;
         }
 
         private static string Setting(string p_key)

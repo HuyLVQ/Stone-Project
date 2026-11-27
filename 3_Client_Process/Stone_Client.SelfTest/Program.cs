@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using Stone_Client.Event;
 using Stone_Client.Networking.Iot;
+using Stone_Client.Video;
 
 namespace Stone_Client.SelfTest
 {
@@ -34,6 +37,10 @@ namespace Stone_Client.SelfTest
                 Test("Handshake request text", HandshakeRequest),
                 Test("Client id validation", ClientIdValidation),
                 Test("Handshake confirmation parsing", ConfirmationParsing),
+                Test("JPEG frame decoding", JpegDecoding),
+                Test("Undecodable JPEG is rejected", InvalidJpegRejected),
+                Test("BGR24 decoder output to bitmap", Bgr24Conversion),
+                Test("FFmpeg decoder arguments", DecoderArguments),
             };
 
             foreach (var test in tests)
@@ -269,6 +276,65 @@ namespace Stone_Client.SelfTest
             True(!IotProtocol.TryParseConfirmation("SERVER CONFIRMED - client id: PC-01; tcp port: 99999", out confirmation), "port out of range");
             True(!IotProtocol.TryParseConfirmation("SERVER CONFIRMED - client id: PC-01; tcp port: 50002; image encoding: VP9", out confirmation), "unknown encoding");
             True(!IotProtocol.TryParseConfirmation("SEARCHING FOR SERVER - my current id is:PC-01", out confirmation), "echoed request");
+        }
+
+        // ------------------------------------------------------------ video
+
+        private static void JpegDecoding()
+        {
+            byte[] jpeg;
+            using (var source = new Bitmap(64, 40, PixelFormat.Format24bppRgb))
+            {
+                using (Graphics graphics = Graphics.FromImage(source)) graphics.Clear(Color.FromArgb(200, 30, 30));
+                using (var stream = new MemoryStream())
+                {
+                    source.Save(stream, ImageFormat.Jpeg);
+                    jpeg = stream.ToArray();
+                }
+            }
+
+            using (Bitmap decoded = FrameDecoding.DecodeJpeg(jpeg))
+            {
+                Equal(64, decoded.Width, "width");
+                Equal(40, decoded.Height, "height");
+                Color centre = decoded.GetPixel(32, 20);
+                True(centre.R > 170 && centre.G < 70 && centre.B < 70, "colour survives JPEG: " + centre);
+            }
+            // The bitmap must not depend on the caller's buffer.
+            Bitmap independent = FrameDecoding.DecodeJpeg(jpeg);
+            Array.Clear(jpeg, 0, jpeg.Length);
+            using (independent) True(independent.GetPixel(32, 20).R > 170, "bitmap is independent of the source bytes");
+        }
+
+        private static void InvalidJpegRejected()
+        {
+            ThrowsInvalidData(() => FrameDecoding.DecodeJpeg(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0xFF, 0xD9 }), "placeholder JPEG");
+            ThrowsInvalidData(() => FrameDecoding.DecodeJpeg(new byte[0]), "empty JPEG");
+        }
+
+        private static void Bgr24Conversion()
+        {
+            // 3x2 frame (odd row width exercises the padded-stride path): B, G, R per pixel.
+            byte[] pixels =
+            {
+                255, 0, 0,    0, 255, 0,    0, 0, 255,
+                10, 20, 30,   40, 50, 60,   70, 80, 90
+            };
+            using (Bitmap bitmap = FrameDecoding.FromBgr24(pixels, 3, 2))
+            {
+                Equal(Color.FromArgb(0, 0, 255).ToArgb(), bitmap.GetPixel(0, 0).ToArgb(), "blue pixel");
+                Equal(Color.FromArgb(0, 255, 0).ToArgb(), bitmap.GetPixel(1, 0).ToArgb(), "green pixel");
+                Equal(Color.FromArgb(255, 0, 0).ToArgb(), bitmap.GetPixel(2, 0).ToArgb(), "red pixel");
+                Equal(Color.FromArgb(90, 80, 70).ToArgb(), bitmap.GetPixel(2, 1).ToArgb(), "second row");
+            }
+        }
+
+        private static void DecoderArguments()
+        {
+            string arguments = FfmpegH264Decoder.BuildArguments(1920, 1200);
+            True(arguments.Contains("-f mpegts -i pipe:0"), "reads MPEG-TS from stdin");
+            True(arguments.Contains("scale=1920:1200"), "fixed output size");
+            True(arguments.Contains("-pix_fmt bgr24 -f rawvideo pipe:1"), "raw BGR24 on stdout");
         }
 
         // ------------------------------------------------------------ helpers

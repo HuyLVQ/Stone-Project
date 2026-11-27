@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 
 namespace Stone_Client.Event
 {
@@ -29,5 +30,16 @@ namespace Stone_Client.Event
         public double accumulatedWeight { get; set; }
         public string weightUnit { get; set; }
         public string[] warnings { get; set; }             // Contract deviations noticed while mapping
+    }
+
+    /// <summary>
+    /// One decoded live frame. The publisher disposes <see cref="image"/> after
+    /// every observer has run, so an observer that keeps the picture must copy it.
+    /// </summary>
+    public class IFrame
+    {
+        public Bitmap image { get; set; }
+        public string sessionId { get; set; }
+        public string encoding { get; set; }               // "JPEG" or "H264"
     }
 }

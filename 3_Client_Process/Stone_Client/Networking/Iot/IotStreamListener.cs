@@ -1,10 +1,12 @@
 using System;
+using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using Stone_Client.Event;
+using Stone_Client.Video;
 
 namespace Stone_Client.Networking.Iot
 {
@@ -32,9 +34,20 @@ namespace Stone_Client.Networking.Iot
         private string m_currentSessionId;
         private long m_sessionMessages;
 
-        internal IotStreamListener(int p_port)
+        // H.264 decoding: one FFmpeg process per session, guarded by m_decoderLock.
+        private readonly string m_ffmpegPath;
+        private readonly object m_decoderLock = new object();
+        private FfmpegH264Decoder m_decoder;
+        private string m_decoderSessionId;
+        private int m_decoderStarts;
+        private string m_noFfmpegReportedSession;
+        private string m_jpegErrorReportedSession;
+
+        /// <param name="p_ffmpegPath">ffmpeg.exe used to decode H.264; null when unavailable.</param>
+        internal IotStreamListener(int p_port, string p_ffmpegPath)
         {
             m_port = p_port;
+            m_ffmpegPath = p_ffmpegPath;
         }
 
         internal bool Start()
@@ -181,17 +194,19 @@ namespace Stone_Client.Networking.Iot
                     OnSessionMessage(image.SessionId, String.Format(CultureInfo.InvariantCulture,
                         "{0} frames ({1}x{2})", String.IsNullOrEmpty(image.Encoding) ? "image" : image.Encoding,
                         image.ImageWidth, image.ImageHeight));
-                    // Phase 3: decode image.JpegImage and publish it to the picture box.
+                    ShowJpeg(image);
                     break;
 
                 case IotPayloadKind.VideoChunk:
                     IotVideoChunk chunk = p_envelope.VideoChunk;
                     OnSessionMessage(chunk.SessionId, chunk.Codec + " over " + chunk.Container + " chunks");
-                    // Phase 4: feed chunk.Data to the H.264 decoder.
+                    FeedVideo(chunk);
                     break;
 
                 case IotPayloadKind.Result:
                     IotInferenceResult result = p_envelope.Result;
+                    // The live stream is over: let FFmpeg flush its last frames.
+                    StopDecoder(result.SessionId);
                     OnSessionResult(result.SessionId);
                     ClientEvent.Instance.notifyResult(IotProtocol.ToResult(result));
                     break;
@@ -202,6 +217,142 @@ namespace Stone_Client.Networking.Iot
                     break;
             }
         }
+
+        // ---------------------------------------------------------------- JPEG
+
+        private void ShowJpeg(IotImageFrame p_image)
+        {
+            Bitmap bitmap;
+            try { bitmap = FrameDecoding.DecodeJpeg(p_image.JpegImage); }
+            catch (InvalidDataException ex)
+            {
+                // One report per session: a broken encoder would otherwise flood the log at 5 fps.
+                if (!String.Equals(m_jpegErrorReportedSession, p_image.SessionId, StringComparison.Ordinal))
+                {
+                    m_jpegErrorReportedSession = p_image.SessionId;
+                    Log(LogLevel.Warning, "Session " + p_image.SessionId + ": a JPEG frame of " + p_image.JpegImage.Length +
+                        " bytes could not be shown (" + ex.Message + "). Further failures in this session are not reported.");
+                }
+                return;
+            }
+            ClientEvent.Instance.notifyFrame(new IFrame { image = bitmap, sessionId = p_image.SessionId, encoding = "JPEG" });
+        }
+
+        // ---------------------------------------------------------------- H.264
+
+        private void FeedVideo(IotVideoChunk p_chunk)
+        {
+            if (m_ffmpegPath == null)
+            {
+                if (!String.Equals(m_noFfmpegReportedSession, p_chunk.SessionId, StringComparison.Ordinal))
+                {
+                    m_noFfmpegReportedSession = p_chunk.SessionId;
+                    Log(LogLevel.Warning, "Session " + p_chunk.SessionId + ": H.264 video arrived but ffmpeg.exe was not found, so it cannot be shown.");
+                }
+                return;
+            }
+
+            FfmpegH264Decoder decoder;
+            FfmpegH264Decoder replaced = null;
+            string replacedSession = null;
+            lock (m_decoderLock)
+            {
+                if (m_stopping) return;
+                if (!String.Equals(m_decoderSessionId, p_chunk.SessionId, StringComparison.Ordinal))
+                {
+                    replaced = m_decoder;
+                    replacedSession = m_decoderSessionId;
+                    m_decoder = null;
+                    m_decoderSessionId = p_chunk.SessionId;
+                    m_decoderStarts = 0;
+                }
+
+                if (m_decoder == null && m_decoderStarts < Config.MAX_DECODER_STARTS_PER_SESSION)
+                {
+                    m_decoderStarts++;
+                    m_decoder = StartDecoder(p_chunk.SessionId, m_decoderStarts);
+                }
+                decoder = m_decoder;
+            }
+
+            if (replaced != null) FinishDecoder(replaced, replacedSession);
+            if (decoder == null) return;
+
+            // Written outside the lock: FFmpeg may block, and Dispose must still be able to stop it.
+            try { decoder.Write(p_chunk.Data); }
+            catch (Exception ex)
+            {
+                if (!(ex is IOException) && !(ex is ObjectDisposedException) && !(ex is InvalidOperationException)) throw;
+                bool wasCurrent;
+                int starts;
+                lock (m_decoderLock)
+                {
+                    wasCurrent = ReferenceEquals(m_decoder, decoder);
+                    if (wasCurrent) m_decoder = null;
+                    starts = m_decoderStarts;
+                }
+                if (!wasCurrent) return;     // Replaced or stopped meanwhile
+                decoder.Dispose();
+                Log(LogLevel.Warning, "Session " + p_chunk.SessionId + ": the H.264 decoder stopped (" + ex.Message + ")" +
+                    (starts < Config.MAX_DECODER_STARTS_PER_SESSION
+                        ? "; it will be restarted at the next video data."
+                        : "; it has failed " + starts + " times, so video is off for the rest of this session."));
+            }
+        }
+
+        private FfmpegH264Decoder StartDecoder(string p_sessionId, int p_attempt)
+        {
+            bool first = true;
+            Action<Bitmap> onFrame = p_bitmap =>
+            {
+                if (first)
+                {
+                    first = false;
+                    Log(LogLevel.Information, "Session " + p_sessionId + ": first H.264 frame decoded.");
+                }
+                ClientEvent.Instance.notifyFrame(new IFrame { image = p_bitmap, sessionId = p_sessionId, encoding = "H264" });
+            };
+            Action<string> onMessage = p_message => Log(LogLevel.Warning, "Session " + p_sessionId + ": " + p_message);
+
+            try
+            {
+                var decoder = new FfmpegH264Decoder(m_ffmpegPath, Config.VIDEO_WIDTH, Config.VIDEO_HEIGHT, onFrame, onMessage);
+                if (p_attempt > 1)
+                    Log(LogLevel.Information, "Session " + p_sessionId + ": H.264 decoder restarted (attempt " + p_attempt + ").");
+                return decoder;
+            }
+            catch (Exception ex)
+            {
+                Log(LogLevel.Error, "Session " + p_sessionId + ": could not start " + m_ffmpegPath + ": " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Stops the decoder of the given session (null = whichever is running).</summary>
+        private void StopDecoder(string p_sessionId)
+        {
+            FfmpegH264Decoder decoder;
+            string sessionId;
+            lock (m_decoderLock)
+            {
+                if (m_decoder == null) return;
+                if (p_sessionId != null && !String.Equals(m_decoderSessionId, p_sessionId, StringComparison.Ordinal)) return;
+                decoder = m_decoder;
+                sessionId = m_decoderSessionId;
+                m_decoder = null;
+            }
+            FinishDecoder(decoder, sessionId);
+        }
+
+        private void FinishDecoder(FfmpegH264Decoder p_decoder, string p_sessionId)
+        {
+            if (p_decoder == null) return;
+            p_decoder.Dispose();
+            Log(LogLevel.Information, "Session " + p_sessionId + ": H.264 decoder stopped after " +
+                p_decoder.FramesDecoded + " frames.");
+        }
+
+        // ---------------------------------------------------------------- sessions
 
         private void OnSessionMessage(string p_sessionId, string p_description)
         {
@@ -269,6 +420,8 @@ namespace Stone_Client.Networking.Iot
             }
             if (active != null) active.Close();
 
+            // Stopping FFmpeg also releases a reader blocked writing to it.
+            StopDecoder(null);
             if (m_acceptThread != null) m_acceptThread.Join(TimeSpan.FromSeconds(2));
             if (reader != null) reader.Join(TimeSpan.FromSeconds(2));
         }
