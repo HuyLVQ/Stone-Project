@@ -30,7 +30,7 @@ namespace Stone_Application.Observer
 
             bmp.UnlockBits(data);
 
-            FormHome.updatePictureBox(bmp);
+            FormHome.updatePictureBox(bmp, p_image.liveSessionToken);
         }
     }
 }

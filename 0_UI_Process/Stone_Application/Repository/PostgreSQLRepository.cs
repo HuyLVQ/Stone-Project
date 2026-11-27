@@ -54,6 +54,7 @@ namespace Stone_Application.Repository
                     "    measured_weight3 REAL NOT NULL," +
                     "    measured_weight4 REAL NOT NULL," +
                     "    isStartOfSession BOOLEAN NOT NULL DEFAULT FALSE," +
+                    "    isFinalizedResult BOOLEAN NOT NULL DEFAULT FALSE," +
                     "    sessionId INTEGER NOT NULL DEFAULT 0," +
                     "    recorded_at TIMESTAMP NOT NULL DEFAULT NOW()" +
                     ");";
@@ -71,10 +72,17 @@ namespace Stone_Application.Repository
                         " ADD COLUMN IF NOT EXISTS isStartOfSession BOOLEAN NOT NULL DEFAULT FALSE;" +
                         " ALTER TABLE " + m_TABLE_NAME +
                         " ADD COLUMN IF NOT EXISTS sessionId INTEGER NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME +
+                        " ADD COLUMN IF NOT EXISTS isFinalizedResult BOOLEAN NOT NULL DEFAULT FALSE;" +
                         " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight1 REAL NOT NULL DEFAULT 0;" +
                         " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight2 REAL NOT NULL DEFAULT 0;" +
                         " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight3 REAL NOT NULL DEFAULT 0;" +
-                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight4 REAL NOT NULL DEFAULT 0;", conn))
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS measured_weight4 REAL NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS analysis_status TEXT NOT NULL DEFAULT 'Unknown';" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS expected_frames BIGINT NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS processed_frames BIGINT NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS skipped_frames BIGINT NOT NULL DEFAULT 0;" +
+                        " ALTER TABLE " + m_TABLE_NAME + " ADD COLUMN IF NOT EXISTS dropped_frames BIGINT NOT NULL DEFAULT 0;", conn))
                     {
                         migrationCmd.ExecuteNonQuery();
                     }
@@ -186,6 +194,54 @@ namespace Stone_Application.Repository
             ;
         }
 
+        // This writes the authoritative offline-video aggregate without applying
+        // the live-row accumulation behavior used by add(). Only one final row is
+        // retained for a session so Excel can select it unambiguously.
+        public void SaveFinalSessionResult(IInformation p_entity)
+        {
+            lock (m_sessionLock)
+            {
+                using (var conn = new NpgsqlConnection(m_connectionString))
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        using (var deleteCmd = new NpgsqlCommand(
+                            "DELETE FROM " + m_TABLE_NAME +
+                            " WHERE sessionId = @sessionId AND isFinalizedResult = TRUE;", conn, transaction))
+                        {
+                            deleteCmd.Parameters.AddWithValue("sessionId", p_entity.sessionId);
+                            deleteCmd.ExecuteNonQuery();
+                        }
+
+                        using (var insertCmd = new NpgsqlCommand(
+                            "INSERT INTO " + m_TABLE_NAME +
+                            " (countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4, isStartOfSession, isFinalizedResult, sessionId, recorded_at, analysis_status, expected_frames, processed_frames, skipped_frames, dropped_frames)" +
+                            " VALUES (@miSang, @p1x2, @p2x4, @p4x6, @weight1, @weight2, @weight3, @weight4, FALSE, TRUE, @sessionId, NOW(), @status, @expected, @processed, @skipped, @dropped);", conn, transaction))
+                        {
+                            insertCmd.Parameters.AddWithValue("miSang", p_entity.countMiSang);
+                            insertCmd.Parameters.AddWithValue("p1x2", p_entity.count1x2);
+                            insertCmd.Parameters.AddWithValue("p2x4", p_entity.count2x4);
+                            insertCmd.Parameters.AddWithValue("p4x6", p_entity.count4x6);
+                            insertCmd.Parameters.AddWithValue("weight1", p_entity.measuredWeight1);
+                            insertCmd.Parameters.AddWithValue("weight2", p_entity.measuredWeight2);
+                            insertCmd.Parameters.AddWithValue("weight3", p_entity.measuredWeight3);
+                            insertCmd.Parameters.AddWithValue("weight4", p_entity.measuredWeight4);
+                            insertCmd.Parameters.AddWithValue("sessionId", p_entity.sessionId);
+                            insertCmd.Parameters.AddWithValue("status", p_entity.analysisStatus);
+                            insertCmd.Parameters.AddWithValue("expected", p_entity.expectedFrames);
+                            insertCmd.Parameters.AddWithValue("processed", p_entity.processedFrames);
+                            insertCmd.Parameters.AddWithValue("skipped", p_entity.skippedFrames);
+                            insertCmd.Parameters.AddWithValue("dropped", p_entity.droppedFrames);
+                            insertCmd.ExecuteNonQuery();
+                        }
+
+                        transaction.Commit();
+                    }
+                }
+            }
+        }
+
         public IResultInformation getTotal()
         {
             string sql =
@@ -290,12 +346,12 @@ namespace Stone_Application.Repository
 
         public List<IInformation> getSessionMeasurements()
         {
-            // Each database row is an accumulated snapshot. DISTINCT ON selects
-            // the newest snapshot for every session, yielding one export row per
-            // sub-session since the application began recording.
+            // Excel is sourced only from the finalized offline-video aggregate,
+            // never from the live inference snapshots recorded during a session.
             string sql =
-                    "SELECT DISTINCT ON (sessionId) sessionId, countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4" +
+                    "SELECT DISTINCT ON (sessionId) sessionId, countMiSang, count1x2, count2x4, count4x6, measured_weight1, measured_weight2, measured_weight3, measured_weight4, analysis_status, expected_frames, processed_frames, skipped_frames, dropped_frames" +
                     " FROM " + m_TABLE_NAME +
+                    " WHERE isFinalizedResult = TRUE" +
                     " ORDER BY sessionId, recorded_at DESC;";
 
             var measurements = new List<IInformation>();
@@ -317,7 +373,12 @@ namespace Stone_Application.Repository
                             measuredWeight1 = reader.GetFloat(5),
                             measuredWeight2 = Config.s_isDebugMode ? reader.GetFloat(6) : 0.0f,
                             measuredWeight3 = Config.s_isDebugMode ? reader.GetFloat(7) : 0.0f,
-                            measuredWeight4 = Config.s_isDebugMode ? reader.GetFloat(8) : 0.0f
+                            measuredWeight4 = Config.s_isDebugMode ? reader.GetFloat(8) : 0.0f,
+                            analysisStatus = reader.GetString(9),
+                            expectedFrames = reader.GetInt64(10),
+                            processedFrames = reader.GetInt64(11),
+                            skippedFrames = reader.GetInt64(12),
+                            droppedFrames = reader.GetInt64(13)
                         });
                     }
                 }

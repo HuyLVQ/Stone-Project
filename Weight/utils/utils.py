@@ -17,7 +17,7 @@ TRAIN_DIR = ROOT_DIR / "train"
 VIDEO_DIR = ROOT_DIR / "video"
 #======================== Globals ======================
 video_cut_time = 3.13
-pixel2cm = 18.82
+pixel2cm = 12.4
 #=======================================================
 
 def prepare_data(csv_path):

@@ -33,6 +33,7 @@ namespace Stone_Application
             this.m_formHomeInstance = new FormHome(this) { Dock = DockStyle.Fill };
             this.m_formSettingsInstance = new FormSettings(this) { Dock = DockStyle.Fill };
             this.m_formLogsInstance = new FormLogs(this) { Dock = DockStyle.Fill };
+            CameraClass.BaslerCamera.ConnectionLost += OnCameraConnectionLost;
 
             this.m_panelHighlight.Height = this.m_buttonHome.Height;
             this.m_panelHighlight.Top = this.m_buttonHome.Top;
@@ -100,6 +101,7 @@ namespace Stone_Application
             this.m_panelLoad.Controls.Clear();
             this.m_panelLoad.Controls.Add(this.m_formLogsInstance);
             this.m_formLogsInstance.Show();
+            this.m_formLogsInstance.RefreshFinalizedResults();
         }
 
         private void buttonSettingsClick(object p_sender, EventArgs p_e)
@@ -116,6 +118,37 @@ namespace Stone_Application
             this.m_panelLoad.Controls.Clear();
             this.m_panelLoad.Controls.Add(this.m_formSettingsInstance);
             this.m_formSettingsInstance.Show();
+        }
+
+        public void RefreshLogs()
+        {
+            this.m_formLogsInstance?.RefreshFinalizedResults();
+        }
+
+        public bool HasInitializedAi => m_formHomeInstance.HasInitializedAi;
+        public bool IsCompletingSession => m_formHomeInstance.IsCompletingSession;
+
+        public void RefreshCameraControls()
+        {
+            m_formHomeInstance.RefreshSessionControls();
+            m_formSettingsInstance.RefreshCameraControls();
+        }
+
+        private void OnCameraConnectionLost(CameraClass.BaslerCamera camera)
+        {
+            // Pylon raises this on a worker thread, possibly while holding its
+            // own lock. Queue UI work and return without waiting for STOP.
+            if (IsDisposed || !IsHandleCreated) return;
+            try
+            {
+                BeginInvoke(new Action(async () =>
+                {
+                    if (m_cleanupStarted || IsDisposed || !ReferenceEquals(Common.camera, camera)) return;
+                    RefreshCameraControls();
+                    await m_formHomeInstance.HandleCameraDisconnectedAsync();
+                }));
+            }
+            catch (InvalidOperationException) { /* The window is closing. */ }
         }
 
         private void buttonExitClick(object p_sender, EventArgs p_e)
@@ -138,8 +171,14 @@ namespace Stone_Application
                 return;
 
             this.m_cleanupStarted = true;
+            CameraClass.BaslerCamera.ConnectionLost -= OnCameraConnectionLost;
 
+            lock (Common.s_lockState) Common.s_currentState = Common.currentState.READY;
+            RunCleanupAction("session dispatch", () => Stone_Application.IPC.IPCServices.getInstance().deactivateSession());
+            Common.videoRecorder.StopAccepting();
             RunCleanupAction("threads", Infrastructure.MultiThread.StopAll);
+            RunCleanupAction("video recording", () => Common.videoRecorder.StopSession());
+            RunCleanupAction("offline inference worker", AIHelper.StopOfflineWorker);
             RunCleanupAction("application resources", FormSettings.CleanupAllResources);
             RunCleanupAction("measurement database", Common.ResetRepository);
             RunCleanupAction("Docker services", InitService.DisposeService.cleanupService);
@@ -216,6 +255,14 @@ namespace Stone_Application
 
         protected override void OnFormClosing(FormClosingEventArgs p_e)
         {
+            if (m_formHomeInstance.IsCompletingSession)
+            {
+                p_e.Cancel = true;
+                MessageBox.Show(this, "Please wait for the session recording and offline analysis to finish before closing.",
+                    "Session completion in progress", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                base.OnFormClosing(p_e);
+                return;
+            }
             CleanupApplicationResources();
             base.OnFormClosing(p_e);
         }

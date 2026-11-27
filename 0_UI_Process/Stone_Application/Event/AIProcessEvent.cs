@@ -57,7 +57,7 @@ namespace Stone_Application.Event
 
         public void notifyInformation(IInformation p_information)
         {
-            Common.PrepareInformationForPersistence(p_information);
+            if (!m_ipcService.IsCurrentSession(p_information.liveSessionToken)) return;
             foreach (var observer in this.m_informationObservers)
             {
                 observer.Update(p_information);

@@ -27,7 +27,6 @@ namespace Stone_Application.PDFExport
                 {
                     Worksheet worksheet = document.WorkbookPart.WorksheetParts.First().Worksheet;
                     SheetData sheetData = worksheet.GetFirstChild<SheetData>();
-
                     uint rowIndex = FirstDataRow;
                     foreach (IInformation measurement in p_measurements)
                     {
@@ -41,11 +40,6 @@ namespace Stone_Application.PDFExport
                         SetNumericCell(row, "D", rowIndex, CalculatePercentage(measurement.count2x4, totalCount));
                         SetNumericCell(row, "E", rowIndex, CalculatePercentage(measurement.count4x6, totalCount));
                         SetNumericCell(row, "F", rowIndex, measurement.measuredWeight1);
-                        if (Config.s_isDebugMode == true) {
-                            SetNumericCell(row, "G", rowIndex, measurement.measuredWeight2);
-                            SetNumericCell(row, "H", rowIndex, measurement.measuredWeight3);
-                            SetNumericCell(row, "I", rowIndex, measurement.measuredWeight4);
-                        }
                         rowIndex++;
                     }
 
@@ -73,7 +67,8 @@ namespace Stone_Application.PDFExport
                 return row;
 
             row = new Row { RowIndex = p_rowIndex };
-            p_sheetData.Append(row);
+            var next = p_sheetData.Elements<Row>().FirstOrDefault(item => item.RowIndex != null && item.RowIndex.Value > p_rowIndex);
+            if (next == null) p_sheetData.Append(row); else p_sheetData.InsertBefore(row, next);
             return row;
         }
 
@@ -84,11 +79,19 @@ namespace Stone_Application.PDFExport
             if (cell == null)
             {
                 cell = new Cell { CellReference = reference, StyleIndex = 4U };
-                p_row.Append(cell);
+                InsertCell(p_row, cell);
             }
 
             cell.DataType = CellValues.Number;
             cell.CellValue = new CellValue(p_value.ToString("0.##", CultureInfo.InvariantCulture));
+        }
+
+        private static void InsertCell(Row row, Cell cell)
+        {
+            Func<string, int> column = reference => reference.TakeWhile(Char.IsLetter).Aggregate(0, (number, letter) => number * 26 + Char.ToUpperInvariant(letter) - 'A' + 1);
+            int target = column(cell.CellReference.Value);
+            Cell next = row.Elements<Cell>().FirstOrDefault(item => item.CellReference != null && column(item.CellReference.Value) > target);
+            if (next == null) row.Append(cell); else row.InsertBefore(cell, next);
         }
     }
 }

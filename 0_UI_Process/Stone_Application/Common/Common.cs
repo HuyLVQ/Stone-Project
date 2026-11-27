@@ -44,6 +44,7 @@ public static class Common
 
         public static EventWaitHandle ui2aiEvent { get; set; }
         public static EventWaitHandle ai2uiEvent { get; set; }
+        public static VideoRecorder videoRecorder { get; } = new VideoRecorder();
         
     
         public static readonly BlockingCollection<Stone_Application.Event.IInformation> s_informationQueue = new BlockingCollection<IInformation>(new ConcurrentQueue<Stone_Application.Event.IInformation>(), Config.BUFFER_BOUND);
@@ -78,10 +79,31 @@ public static class Common
 
             lock (s_lockSession)
             {
+                if (p_information.sessionId > 0) return;
                 p_information.sessionId = s_currentSessionId;
                 p_information.isStartOfSession = s_sessionEntryPending;
                 s_sessionEntryPending = false;
             }
+        }
+
+        // Live measurements remain useful runtime telemetry. The offline video
+        // aggregate is persisted separately as the session's export authority.
+        public static void PersistFinalSessionResult(IInformation p_information)
+        {
+            PostgreSqlRepository repository = s_repositoryInstance as PostgreSqlRepository;
+            if (repository == null)
+                throw new InvalidOperationException("Offline session results require the PostgreSQL repository.");
+
+            lock (s_lockSession)
+            {
+                if (s_currentSessionId <= 0)
+                    throw new InvalidOperationException("No active session is available for the offline result.");
+
+                p_information.sessionId = s_currentSessionId;
+                p_information.isStartOfSession = false;
+            }
+
+            repository.SaveFinalSessionResult(p_information);
         }
 
         public static void ResetRepository()

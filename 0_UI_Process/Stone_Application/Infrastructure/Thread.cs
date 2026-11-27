@@ -35,38 +35,16 @@ namespace Stone_Application.Infrastructure
 
                 s_thread1Task = Task.Run(() =>
                 {
-                    int[] temporaryStorage = new int[2];
-                    int encoderFeedback = 0;
-
                     while (!token.IsCancellationRequested)
                     {
                         try
                         {
-                            lock (Common.s_lockState)
-                            {
-                                if (Common.s_currentState != Common.currentState.STREAMING)
-                                {
-                                    if (Config.s_isDebugMode == true) {
-                                        Console.WriteLine("[INFO] [THREAD #1] Not in streamin mode, go to sleep...");
-                                    }
-                                    Thread.Sleep(100);
-                                    continue;
-                                }
-                            }
+                            bool streaming;
+                            lock (Common.s_lockState) streaming = Common.s_currentState == Common.currentState.STREAMING;
+                            if (!streaming) { if (token.WaitHandle.WaitOne(100)) break; continue; }
 
-                            if (Common.s_stopWatchMain.ElapsedMilliseconds >= Config.TIME_INTERVAL)
-                            {
-                                Common.s_stopWatchMain.Restart();
-
-                                if (Config.s_isDebugMode == true) {
-                                    Console.WriteLine("[INFO] [THREAD #1] New Thread 1 cycle...");
-                                    Console.WriteLine("[INFO] [THREAD #1] Camera capture...");
-                                }
-
-                                Common.camera.cameraCapture(token);
-                            }
-                            // small delay to avoid busy spin if interval is very small
-                            Thread.Sleep(1);
+                            // Capture is deliberately independent of inference cadence.
+                            Common.camera.cameraCapture(token);
                             //Console.WriteLine("[INFO] [THREAD #1] Exiting thread.");
                         }
                         catch (OperationCanceledException)
@@ -116,69 +94,43 @@ namespace Stone_Application.Infrastructure
                                 Console.WriteLine("[INFO] [THREAD #2] New Thread 2 cycle...");
                             }
 
-                            Event.IImage temporaryImage;
-                            try
+                            bool streaming;
+                            lock (Common.s_lockState) streaming = Common.s_currentState == Common.currentState.STREAMING;
+                            if (!streaming || !ipcServices.isSessionActive())
+                            { if (token.WaitHandle.WaitOne(100)) break; continue; }
+
+                            // Coalesce missed intervals: one in-flight AI request is supported by
+                            // the existing event protocol, and each due request uses the newest frame.
+                            long delay = Config.TIME_INTERVAL - Common.s_stopWatchMain.ElapsedMilliseconds;
+                            if (delay > 0)
                             {
-                                // BlockingCollection.Take supports cancellation token
-                                temporaryImage = Common.s_imageQueue.Take(token);
+                                if (token.WaitHandle.WaitOne((int)delay)) break;
                             }
-                            catch (OperationCanceledException)
+                            Common.s_stopWatchMain.Restart();
+
+                            int inferenceSlot;
+                            long sessionToken;
+                            if (!ipcServices.TryDispatch(out inferenceSlot, out sessionToken)) continue;
+                            while (!token.IsCancellationRequested && ipcServices.HasPendingRequest(sessionToken))
                             {
-                                break;
+                                if (token.WaitHandle.WaitOne(50)) break;
+                                IInformation information;
+                                Event.IImage image;
+                                try
+                                {
+                                    if (ipcServices.CompleteInference(inferenceSlot, sessionToken, out information, out image))
+                                    {
+                                        // The inference slot is already released; UI delivery is asynchronous.
+                                        ipcServices.PublishIfCurrent(sessionToken, () =>
+                                        {
+                                            aiProcessEvent.notifyImage(image);
+                                            aiProcessEvent.notifyInformation(information);
+                                        });
+                                    }
+                                }
+                                catch (Exception ex) { Console.WriteLine("[ERROR] [RESULT] " + ex.Message); }
+                                if (!ipcServices.HasPendingRequest(sessionToken)) break;
                             }
-
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] Image taken from queue...");
-                            }
-
-                            try
-                            {
-                                ipcServices.writeTask(temporaryImage);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine("[ERROR] [THREAD #2] writeTask failed: " + ex.Message);
-                                continue;
-                            }
-
-                            Common.ui2aiEvent.Set();
-
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] UI to AI event set...");
-                            }
-
-                            // Wait for AI to respond, but allow periodic cancellation checks.
-                            while (!token.IsCancellationRequested)
-                            {
-                                // WaitOne with timeout to be able to check cancellation token regularly.
-                                if (Common.ai2uiEvent.WaitOne(200))
-                                    break;
-                            }
-
-                            if (token.IsCancellationRequested)
-                                break;
-
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] AI to UI event received...");
-                            }
-
-                            IInformation temporaryInformation;
-                            try
-                            {
-                                (temporaryInformation, temporaryImage) = ipcServices.readTask();
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine("[ERROR] [THREAD #2] readTask failed: " + ex.Message);
-                                continue;
-                            }
-
-                            if (Config.s_isDebugMode == true) {
-                                Console.WriteLine("[INFO] [THREAD #2] AI results read from shared memory...");
-                            }
-
-                            aiProcessEvent.notifyImage(temporaryImage);
-                            aiProcessEvent.notifyInformation(temporaryInformation);
                         }
                     }
                     catch (OperationCanceledException)

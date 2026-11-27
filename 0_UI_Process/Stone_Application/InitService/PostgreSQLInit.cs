@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
+using Npgsql;
 
 namespace Stone_Application.InitService
 {
@@ -17,39 +18,51 @@ namespace Stone_Application.InitService
 
         public static void PostgreSQLInitSrv()
         {
-            try
+            if (!EnsureDockerEngineReady())
             {
-                if (!EnsureDockerEngineReady())
-                {
-                    Console.WriteLine($"[ERROR] Failed to start Docker Engine.");
-                    return;
-                }
-
-                string composeDirectory = FindComposeDirectory();
-
-                CommandResult startResult = RunDockerCommand("compose up -d", composeDirectory);
-                WriteCommandOutput(startResult);
-
-                if (startResult.ExitCode != 0)
-                {
-                    Console.WriteLine($"[ERROR] Failed to start PostgreSQL service. Exit code: {startResult.ExitCode}.");
-                    return;
-                }
-
-                Console.WriteLine("[INFO] PostgreSQL service started. Waiting for database readiness...");
-
-                if (WaitForPostgreSqlReady())
-                    Console.WriteLine("[INFO] PostgreSQL service is running and accessible.");
-                else
-                    Console.WriteLine($"[ERROR] PostgreSQL service did not become ready within {m_READY_TIMEOUT_SECONDS} seconds.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[ERROR] Failed to start PostgreSQL service: {ex.Message}");
+                throw new InvalidOperationException("Docker Engine did not become ready.");
             }
 
-            Common.s_repositoryInstance = new PostgreSqlRepository();
-            Console.WriteLine($"[INFO] SQL init successfully");
+            string composeDirectory = FindComposeDirectory();
+            CommandResult startResult = RunDockerCommand("compose up -d", composeDirectory);
+            WriteCommandOutput(startResult);
+            if (startResult.ExitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    "Failed to start PostgreSQL service. Docker Compose exit code: " + startResult.ExitCode + ".");
+            }
+
+            Console.WriteLine("[INFO] PostgreSQL service started. Waiting for database readiness...");
+            if (!WaitForPostgreSqlReady())
+                throw new TimeoutException("PostgreSQL did not become ready within " + m_READY_TIMEOUT_SECONDS + " seconds.");
+
+            Common.s_repositoryInstance = CreateRepositoryWithRetry();
+            Console.WriteLine("[INFO] SQL init successfully");
+        }
+
+        private static PostgreSqlRepository CreateRepositoryWithRetry()
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(m_READY_TIMEOUT_SECONDS);
+            NpgsqlException lastError = null;
+            do
+            {
+                try
+                {
+                    return new PostgreSqlRepository();
+                }
+                catch (NpgsqlException ex)
+                {
+                    lastError = ex;
+                    if (DateTime.UtcNow >= deadline)
+                        break;
+                    Console.WriteLine("[WARN] PostgreSQL accepted its readiness probe but the application connection failed; retrying: " + ex.Message);
+                    Thread.Sleep(1000);
+                }
+            }
+            while (DateTime.UtcNow < deadline);
+
+            throw new InvalidOperationException(
+                "Could not initialize the PostgreSQL repository after " + m_READY_TIMEOUT_SECONDS + " seconds.", lastError);
         }
 
         private static bool WaitForPostgreSqlReady()

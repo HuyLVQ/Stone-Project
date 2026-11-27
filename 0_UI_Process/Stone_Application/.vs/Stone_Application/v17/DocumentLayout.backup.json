@@ -1,16 +1,7 @@
 {
   "Version": 1,
   "WorkspaceRootPath": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\",
-  "Documents": [
-    {
-      "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|e:\\33_stone_project\\0_ui_process\\stone_application\\forms\\formlogs.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:forms\\formlogs.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{F6C53126-A761-4513-88A0-0FF75B2BE369}|Stone_Application.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    }
-  ],
+  "Documents": [],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
@@ -18,7 +9,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 4,
+          "SelectedChildIndex": -1,
           "Children": [
             {
               "$type": "Bookmark",
@@ -35,31 +26,6 @@
             {
               "$type": "Bookmark",
               "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "FormLogs.cs",
-              "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Forms\\FormLogs.cs",
-              "RelativeDocumentMoniker": "Forms\\FormLogs.cs",
-              "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Forms\\FormLogs.cs",
-              "RelativeToolTip": "Forms\\FormLogs.cs",
-              "ViewState": "AgIAAIAAAAAAAAAAAAAswI8AAAAjAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-07-05T06:19:03.743Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "Program.cs",
-              "DocumentMoniker": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Program.cs",
-              "RelativeDocumentMoniker": "Program.cs",
-              "ToolTip": "E:\\33_Stone_Project\\0_UI_Process\\Stone_Application\\Program.cs",
-              "RelativeToolTip": "Program.cs",
-              "ViewState": "AgIAAAEAAAAAAAAAAAAIwBMAAAAsAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-07-05T03:07:52.713Z"
             }
           ]
         },

@@ -35,3 +35,10 @@ Thumbs.db
 0_UI_Process/Stone_Application/*.suo
 0_UI_Process/Stone_Application/*.userosscache
 0_UI_Process/Stone_Application/*.sln.docstates
+
+
+# Recording files
+Recording/*
+
+# Excel files
+0_UI_Process/Stone_Application/PDF_Reference/*.xlsx
