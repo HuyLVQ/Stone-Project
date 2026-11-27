@@ -63,7 +63,7 @@ namespace Stone_Application.Networking.Iot
                 m_sequence = 0;
                 m_lastImagePublishTimestamp = 0;
                 m_mode = DeliveryMode.Images;
-                foreach (IotClientConnection client in m_clients.Values) client.ClearPendingImages();
+                foreach (IotClientConnection client in m_clients.Values) client.ClearPending();
             }
         }
 
@@ -256,11 +256,12 @@ namespace Stone_Application.Networking.Iot
             lock (m_publishLock)
             {
                 if (m_mode != DeliveryMode.Images) return;
-                byte[] envelope = IotProtocol.CreateH264ChunkEnvelope(transportChunk, m_sessionToken, ++m_sequence);
-                byte[] message = IotProtocol.Frame(envelope);
+                // Each client frames its own envelope: one that is resyncing to a
+                // keyframe may send only the tail of this chunk.
+                long sequence = ++m_sequence;
                 foreach (IotClientConnection client in m_clients.Values)
                 {
-                    if (client.UsesH264) client.QueueVideoChunk(message);
+                    if (client.UsesH264) client.QueueVideoChunk(transportChunk, m_sessionToken, sequence);
                 }
             }
         }

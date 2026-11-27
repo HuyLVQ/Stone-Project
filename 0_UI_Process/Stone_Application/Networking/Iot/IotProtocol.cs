@@ -20,6 +20,8 @@ namespace Stone_Application.Networking.Iot
         internal const uint JpegSchemaVersion = 2;
         internal const uint H264SchemaVersion = 3;
         internal const long JpegQuality = 85;
+        internal const int TsPacketBytes = 188;
+        private const byte TsSyncByte = 0x47;
 
         internal static byte[] CompressAnnotatedImage(byte[] bgrImage)
         {
@@ -202,6 +204,41 @@ namespace Stone_Application.Networking.Iot
             envelope.UInt32(1, H264SchemaVersion);
             envelope.Message(12, chunk.ToArray());
             return envelope.ToArray();
+        }
+
+        /// <summary>
+        /// Returns the offset of the first H.264 keyframe in a chunk of whole
+        /// MPEG-TS packets, or -1 when the chunk holds none. FFmpeg marks the
+        /// first packet of each keyframe with the adaptation-field
+        /// random_access_indicator and writes PAT/PMT just before it, so the
+        /// offset backs up over those preceding non-video packets as well.
+        /// A receiver can start decoding cleanly from the returned offset.
+        /// </summary>
+        internal static int FindKeyframeOffset(byte[] transportChunk)
+        {
+            if (transportChunk == null) return -1;
+            for (int offset = 0; offset + TsPacketBytes <= transportChunk.Length; offset += TsPacketBytes)
+            {
+                if (transportChunk[offset] != TsSyncByte) return -1;
+                int adaptationFieldControl = (transportChunk[offset + 3] >> 4) & 0x3;
+                bool hasAdaptationField = adaptationFieldControl == 2 || adaptationFieldControl == 3;
+                if (!hasAdaptationField || transportChunk[offset + 4] == 0) continue;
+                if ((transportChunk[offset + 5] & 0x40) == 0) continue;
+
+                int videoPid = TsPid(transportChunk, offset);
+                int start = offset;
+                while (start >= TsPacketBytes &&
+                       transportChunk[start - TsPacketBytes] == TsSyncByte &&
+                       TsPid(transportChunk, start - TsPacketBytes) != videoPid)
+                    start -= TsPacketBytes;
+                return start;
+            }
+            return -1;
+        }
+
+        private static int TsPid(byte[] packet, int offset)
+        {
+            return ((packet[offset + 1] & 0x1F) << 8) | packet[offset + 2];
         }
 
         internal static IPAddress NormalizeAddress(IPAddress address)

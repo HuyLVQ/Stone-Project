@@ -99,15 +99,26 @@ namespace Stone_Application.Networking.Iot
 
         private void PumpOutput()
         {
-            byte[] buffer = new byte[32 * 1024];
+            // Publish whole 188-byte MPEG-TS packets only, so a receiver that
+            // skips chunks (see IotClientConnection) never loses packet alignment.
+            // The buffer is a multiple of the packet size, so it can never fill
+            // up without yielding at least one complete packet.
+            byte[] buffer = new byte[IotProtocol.TsPacketBytes * 174];
+            int filled = 0;
             try
             {
                 Stream output = m_process.StandardOutput.BaseStream;
                 int read;
-                while ((read = output.Read(buffer, 0, buffer.Length)) > 0)
+                while ((read = output.Read(buffer, filled, buffer.Length - filled)) > 0)
                 {
-                    byte[] chunk = new byte[read];
-                    Buffer.BlockCopy(buffer, 0, chunk, 0, read);
+                    filled += read;
+                    int aligned = filled - filled % IotProtocol.TsPacketBytes;
+                    if (aligned == 0) continue;
+
+                    byte[] chunk = new byte[aligned];
+                    Buffer.BlockCopy(buffer, 0, chunk, 0, aligned);
+                    filled -= aligned;
+                    if (filled > 0) Buffer.BlockCopy(buffer, aligned, buffer, 0, filled);
                     try { m_chunkHandler(chunk); }
                     catch (Exception ex) { Console.WriteLine("[WARN] [IOT] Could not publish H.264 transport data: " + ex.Message); }
                 }

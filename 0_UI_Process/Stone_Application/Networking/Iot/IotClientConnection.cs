@@ -1,27 +1,44 @@
 using System;
-using System.Collections.Concurrent;
-using System.IO;
+using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Stone_Application.Networking.Iot
 {
+    /// <summary>
+    /// Delivers framed envelopes to one client over a TCP connection that this
+    /// server dials.
+    ///
+    /// JPEG frames and the final result use a latest-only slot: an undelivered
+    /// frame is simply replaced by a newer one. H.264 chunks are pieces of one
+    /// continuous MPEG-TS stream, so they are queued in order. If that queue
+    /// exceeds its byte budget, or a send fails, the queued chunks are dropped
+    /// and delivery resumes at the next keyframe so the client's decoder
+    /// restarts cleanly instead of receiving a corrupted stream.
+    /// </summary>
     internal sealed class IotClientConnection : IDisposable
     {
+        // About four seconds of video at the encoder's 2 Mbit/s rate.
+        private const int MaxQueuedVideoBytes = 1024 * 1024;
+
         private sealed class OutboundFrame
         {
             internal byte[] Bytes;
             internal bool IsFinalResult;
+            internal bool IsVideo;
         }
 
         private readonly string m_clientId;
         private readonly string m_address;
-        private readonly BlockingCollection<OutboundFrame> m_queue = new BlockingCollection<OutboundFrame>(1);
         private readonly CancellationTokenSource m_stop = new CancellationTokenSource();
         private readonly Task m_worker;
         private readonly object m_queueLock = new object();
         private readonly object m_activeClientLock = new object();
+        private OutboundFrame m_latest;                                     // Guarded by m_queueLock
+        private readonly Queue<byte[]> m_video = new Queue<byte[]>();       // Guarded by m_queueLock
+        private int m_videoBytes;                                           // Guarded by m_queueLock
+        private bool m_videoNeedsKeyframe = true;                           // Guarded by m_queueLock
         private TcpClient m_activeClient;
         private bool m_activeIsResult;
         private long m_lastSeenUtcTicks;
@@ -57,28 +74,62 @@ namespace Stone_Application.Networking.Iot
             QueueLatest(new OutboundFrame { Bytes = framedMessage, IsFinalResult = false });
         }
 
-        internal void QueueVideoChunk(byte[] framedMessage)
-        {
-            QueueLatest(new OutboundFrame { Bytes = framedMessage, IsFinalResult = false });
-        }
-
         internal void QueueResult(byte[] framedMessage)
         {
             QueueLatest(new OutboundFrame { Bytes = framedMessage, IsFinalResult = true });
         }
 
-        internal void ClearPendingImages()
+        /// <summary>
+        /// Queues one chunk of whole MPEG-TS packets. While the client needs a
+        /// keyframe (new client, new session, overflow or failed send), chunks
+        /// are skipped until one contains a keyframe, which is sent from there.
+        /// </summary>
+        internal void QueueVideoChunk(byte[] transportChunk, long sessionToken, long sequence)
         {
             lock (m_queueLock)
             {
-                OutboundFrame queued;
-                while (m_queue.TryTake(out queued)) { }
+                if (m_disposed || transportChunk == null || transportChunk.Length == 0) return;
+
+                if (!m_videoNeedsKeyframe && m_videoBytes + transportChunk.Length > MaxQueuedVideoBytes)
+                {
+                    DropVideoLocked();
+                    Console.WriteLine("[WARN] [IOT] Video backlog for " + m_clientId + " exceeded " +
+                        (MaxQueuedVideoBytes / 1024) + " KB; skipping to the next keyframe.");
+                }
+
+                byte[] data = transportChunk;
+                if (m_videoNeedsKeyframe)
+                {
+                    int offset = IotProtocol.FindKeyframeOffset(transportChunk);
+                    if (offset < 0) return;
+                    if (offset > 0)
+                    {
+                        data = new byte[transportChunk.Length - offset];
+                        Buffer.BlockCopy(transportChunk, offset, data, 0, data.Length);
+                    }
+                    m_videoNeedsKeyframe = false;
+                }
+
+                byte[] message = IotProtocol.Frame(IotProtocol.CreateH264ChunkEnvelope(data, sessionToken, sequence));
+                m_video.Enqueue(message);
+                m_videoBytes += message.Length;
+                Monitor.Pulse(m_queueLock);
+            }
+        }
+
+        /// <summary>Drops every undelivered frame, result and video chunk.</summary>
+        internal void ClearPending()
+        {
+            lock (m_queueLock)
+            {
+                m_latest = null;
+                DropVideoLocked();
             }
         }
 
         internal void StopImageDelivery()
         {
-            ClearPendingImages();
+            ClearPending();
             lock (m_activeClientLock)
             {
                 if (m_activeClient != null && !m_activeIsResult)
@@ -88,12 +139,39 @@ namespace Stone_Application.Networking.Iot
 
         private void QueueLatest(OutboundFrame frame)
         {
-            if (m_disposed) return;
             lock (m_queueLock)
             {
-                OutboundFrame queued;
-                while (m_queue.TryTake(out queued)) { }
-                if (!m_disposed) m_queue.TryAdd(frame);
+                if (m_disposed) return;
+                m_latest = frame;
+                Monitor.Pulse(m_queueLock);
+            }
+        }
+
+        private void DropVideoLocked()
+        {
+            m_video.Clear();
+            m_videoBytes = 0;
+            m_videoNeedsKeyframe = true;
+        }
+
+        private OutboundFrame TakeNext()
+        {
+            lock (m_queueLock)
+            {
+                while (!m_disposed && m_latest == null && m_video.Count == 0)
+                    Monitor.Wait(m_queueLock);
+                if (m_disposed) return null;
+
+                if (m_latest != null)
+                {
+                    OutboundFrame latest = m_latest;
+                    m_latest = null;
+                    return latest;
+                }
+
+                byte[] chunk = m_video.Dequeue();
+                m_videoBytes -= chunk.Length;
+                return new OutboundFrame { Bytes = chunk, IsVideo = true };
             }
         }
 
@@ -103,10 +181,8 @@ namespace Stone_Application.Networking.Iot
             NetworkStream stream = null;
             while (!m_stop.IsCancellationRequested)
             {
-                OutboundFrame frame;
-                try { frame = m_queue.Take(m_stop.Token); }
-                catch (OperationCanceledException) { break; }
-                catch (InvalidOperationException) { break; }
+                OutboundFrame frame = TakeNext();
+                if (frame == null) break;
 
                 try
                 {
@@ -144,14 +220,18 @@ namespace Stone_Application.Networking.Iot
                         // Keep the final result pending for a later reconnect.
                         lock (m_queueLock)
                         {
-                            OutboundFrame queued;
-                            while (m_queue.TryTake(out queued)) { }
-                            if (!m_disposed) m_queue.TryAdd(frame);
+                            if (!m_disposed) m_latest = frame;
                         }
                         if (m_stop.Token.WaitHandle.WaitOne(1000)) break;
                     }
                     else
                     {
+                        // A video chunk may have been partly written, and the client's
+                        // decoder has now lost data: restart it at the next keyframe.
+                        if (frame.IsVideo)
+                        {
+                            lock (m_queueLock) DropVideoLocked();
+                        }
                         Console.WriteLine("[WARN] [IOT] Image delivery failed for " + m_clientId + ": " + ex.Message);
                     }
                 }
@@ -178,18 +258,19 @@ namespace Stone_Application.Networking.Iot
             {
                 if (m_disposed) return;
                 m_disposed = true;
-                OutboundFrame queued;
-                while (m_queue.TryTake(out queued)) { }
-                m_queue.CompleteAdding();
+                m_latest = null;
+                DropVideoLocked();
+                Monitor.PulseAll(m_queueLock);
             }
             lock (m_activeClientLock)
             {
                 if (m_activeClient != null) m_activeClient.Close();
             }
             m_stop.Cancel();
-            try { m_worker.Wait(TimeSpan.FromSeconds(2)); } catch { }
-            m_queue.Dispose();
-            m_stop.Dispose();
+            bool stopped = false;
+            try { stopped = m_worker.Wait(TimeSpan.FromSeconds(2)); } catch { }
+            // A worker still blocked in a send may yet touch the token source.
+            if (stopped) m_stop.Dispose();
         }
     }
 }

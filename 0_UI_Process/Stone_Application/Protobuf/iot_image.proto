@@ -19,6 +19,10 @@ message ImageFrame {
 
 // MPEG-TS bytes contain an H.264 video stream. Chunks are ordered by
 // sequence_number and must be concatenated before passing them to a decoder.
+// Each chunk holds whole 188-byte TS packets. The first chunk a client
+// receives starts at a keyframe. If the server falls behind or a send fails,
+// it drops the backlog and resumes at a later keyframe; the gap shows up as
+// a jump in sequence_number, and decoding can continue from the new chunk.
 message H264TransportChunk {
   uint32 schema_version = 1;
   string session_id = 2;
