@@ -143,7 +143,15 @@ namespace Stone_Client.Networking.Iot
                         Log(LogLevel.Warning, "Discarded a malformed record of " + length + " bytes: " + ex.Message);
                         continue;
                     }
-                    Dispatch(envelope);
+
+                    // An unexpected failure while handling one record must not end this
+                    // thread: an exception escaping it would terminate the whole client.
+                    try { Dispatch(envelope); }
+                    catch (Exception ex)
+                    {
+                        Log(LogLevel.Warning, "Could not handle a " + envelope.Kind + " record of " + length + " bytes: " +
+                            ex.GetType().Name + ": " + ex.Message);
+                    }
                 }
             }
             catch (IOException ex)

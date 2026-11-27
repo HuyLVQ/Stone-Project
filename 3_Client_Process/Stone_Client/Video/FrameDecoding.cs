@@ -32,6 +32,12 @@ namespace Stone_Client.Video
             {
                 throw new InvalidDataException("The image data could not be decoded: " + ex.Message, ex);
             }
+            catch (OutOfMemoryException ex)
+            {
+                // GDI+ reports malformed images, and images too large to allocate,
+                // as OutOfMemoryException.
+                throw new InvalidDataException("The image data could not be decoded: " + ex.Message, ex);
+            }
         }
 
         /// <summary>Wraps tightly packed BGR24 pixels (FFmpeg's bgr24) in a new bitmap.</summary>

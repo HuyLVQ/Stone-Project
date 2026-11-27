@@ -103,6 +103,7 @@ namespace Stone_Client.Video
         {
             int frameBytes = checked(Width * Height * 3);
             byte[] buffer = new byte[frameBytes];
+            bool frameErrorReported = false;
             try
             {
                 Stream output = m_process.StandardOutput.BaseStream;
@@ -117,7 +118,19 @@ namespace Stone_Client.Video
                     }
 
                     Interlocked.Increment(ref m_framesDecoded);
-                    Bitmap frame = FrameDecoding.FromBgr24(buffer, Width, Height);
+                    // Skip a frame that cannot be wrapped (for example, out of memory)
+                    // rather than let the exception end this thread and the process.
+                    Bitmap frame;
+                    try { frame = FrameDecoding.FromBgr24(buffer, Width, Height); }
+                    catch (Exception ex)
+                    {
+                        if (!frameErrorReported)
+                        {
+                            frameErrorReported = true;
+                            Report("A decoded frame could not be shown (" + ex.Message + "); further failures are not reported.");
+                        }
+                        continue;
+                    }
                     try { m_onFrame(frame); }
                     catch (Exception ex) { Report("Frame handler failed: " + ex.Message); }
                 }

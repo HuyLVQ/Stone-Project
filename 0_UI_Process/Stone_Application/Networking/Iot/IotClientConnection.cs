@@ -27,6 +27,7 @@ namespace Stone_Application.Networking.Iot
             internal byte[] Bytes;
             internal bool IsFinalResult;
             internal bool IsVideo;
+            internal long Generation;       // m_generation when the frame was taken for sending
         }
 
         private readonly string m_clientId;
@@ -39,6 +40,7 @@ namespace Stone_Application.Networking.Iot
         private readonly Queue<byte[]> m_video = new Queue<byte[]>();       // Guarded by m_queueLock
         private int m_videoBytes;                                           // Guarded by m_queueLock
         private bool m_videoNeedsKeyframe = true;                           // Guarded by m_queueLock
+        private long m_generation;                                          // Guarded by m_queueLock; bumped by ClearPending
         private TcpClient m_activeClient;
         private bool m_activeIsResult;
         private long m_lastSeenUtcTicks;
@@ -133,11 +135,15 @@ namespace Stone_Application.Networking.Iot
             }
         }
 
-        /// <summary>Drops every undelivered frame, result and video chunk.</summary>
+        /// <summary>
+        /// Drops every undelivered frame, result and video chunk. A send already
+        /// in progress is abandoned too: if it fails, it is not put back.
+        /// </summary>
         internal void ClearPending()
         {
             lock (m_queueLock)
             {
+                m_generation++;
                 m_latest = null;
                 DropVideoLocked();
             }
@@ -182,12 +188,13 @@ namespace Stone_Application.Networking.Iot
                 {
                     OutboundFrame latest = m_latest;
                     m_latest = null;
+                    latest.Generation = m_generation;
                     return latest;
                 }
 
                 byte[] chunk = m_video.Dequeue();
                 m_videoBytes -= chunk.Length;
-                return new OutboundFrame { Bytes = chunk, IsVideo = true };
+                return new OutboundFrame { Bytes = chunk, IsVideo = true, Generation = m_generation };
             }
         }
 
@@ -233,10 +240,12 @@ namespace Stone_Application.Networking.Iot
                     CloseClient(ref client, ref stream);
                     if (frame.IsFinalResult && !m_stop.IsCancellationRequested)
                     {
-                        // Keep the final result pending for a later reconnect.
+                        // Keep the final result pending for a later reconnect, unless a
+                        // new session started meanwhile (ClearPending) or something newer
+                        // was queued: an old result must not replace the new session's frames.
                         lock (m_queueLock)
                         {
-                            if (!m_disposed) m_latest = frame;
+                            if (!m_disposed && m_latest == null && frame.Generation == m_generation) m_latest = frame;
                         }
                         if (m_stop.Token.WaitHandle.WaitOne(1000)) break;
                     }
@@ -246,7 +255,12 @@ namespace Stone_Application.Networking.Iot
                         // decoder has now lost data: restart it at the next keyframe.
                         if (frame.IsVideo)
                         {
-                            lock (m_queueLock) DropVideoLocked();
+                            // After ClearPending the new session already restarts at a keyframe,
+                            // and its chunks queued since then are intact.
+                            lock (m_queueLock)
+                            {
+                                if (frame.Generation == m_generation) DropVideoLocked();
+                            }
                         }
                         Console.WriteLine("[WARN] [IOT] Image delivery failed for " + m_clientId + ": " + ex.Message);
                     }

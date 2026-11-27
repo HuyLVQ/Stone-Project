@@ -310,6 +310,22 @@ namespace Stone_Client.SelfTest
         {
             ThrowsInvalidData(() => FrameDecoding.DecodeJpeg(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0xFF, 0xD9 }), "placeholder JPEG");
             ThrowsInvalidData(() => FrameDecoding.DecodeJpeg(new byte[0]), "empty JPEG");
+
+            // A valid JPEG whose header claims 65535x65535 pixels: GDI+ fails with
+            // OutOfMemoryException or ArgumentException, which must not escape.
+            byte[] huge;
+            using (var source = new Bitmap(16, 16, PixelFormat.Format24bppRgb))
+            using (var stream = new MemoryStream())
+            {
+                source.Save(stream, ImageFormat.Jpeg);
+                huge = stream.ToArray();
+            }
+            int sof = -1;
+            for (int index = 2; index + 8 < huge.Length; index++)
+                if (huge[index] == 0xFF && huge[index + 1] == 0xC0) { sof = index; break; }
+            True(sof > 0, "test JPEG has a baseline SOF marker");
+            for (int index = sof + 5; index < sof + 9; index++) huge[index] = 0xFF;
+            ThrowsInvalidData(() => FrameDecoding.DecodeJpeg(huge).Dispose(), "JPEG claiming 65535x65535");
         }
 
         private static void Bgr24Conversion()
