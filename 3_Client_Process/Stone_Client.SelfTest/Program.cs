@@ -350,7 +350,7 @@ namespace Stone_Client.SelfTest
             string arguments = FfmpegH264Decoder.BuildArguments(1920, 1200);
             True(arguments.Contains("-f mpegts -i pipe:0"), "reads MPEG-TS from stdin");
             True(arguments.Contains("scale=1920:1200"), "fixed output size");
-            True(arguments.Contains("-vsync passthrough"), "no duplicate frames after a gap");
+            True(arguments.Contains("-fps_mode passthrough"), "no duplicate frames after a gap");
             True(arguments.Contains("-pix_fmt bgr24 -f rawvideo pipe:1"), "raw BGR24 on stdout");
         }
 
