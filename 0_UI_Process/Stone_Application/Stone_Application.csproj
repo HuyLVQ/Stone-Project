@@ -217,6 +217,7 @@
     <Compile Include="Infrastructure\PooledFrameBuffer.cs" />
     <Compile Include="Infrastructure\Thread.cs" />
     <Compile Include="Infrastructure\VideoRecorder.cs" />
+    <Compile Include="Infrastructure\VideoSegmentWriters.cs" />
     <Compile Include="InitService\DisposeService.cs" />
     <Compile Include="InitService\PostgreSQLInit.cs" />
     <Compile Include="MainForm.cs">

@@ -281,23 +281,7 @@ namespace Stone_Application.Networking.Iot
             }
         }
 
-        private static string FindFfmpegExecutable()
-        {
-            string configuredPath = Environment.GetEnvironmentVariable("STONE_FFMPEG_PATH");
-            if (!String.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath)) return configuredPath;
-
-            string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg.exe");
-            if (File.Exists(localPath)) return localPath;
-
-            string pathEnvironment = Environment.GetEnvironmentVariable("PATH") ?? String.Empty;
-            foreach (string directory in pathEnvironment.Split(Path.PathSeparator))
-            {
-                if (String.IsNullOrWhiteSpace(directory)) continue;
-                string candidate = Path.Combine(directory.Trim(), "ffmpeg.exe");
-                if (File.Exists(candidate)) return candidate;
-            }
-            return null;
-        }
+        private static string FindFfmpegExecutable() { return FfmpegLocator.Find(); }
 
         public void Stop()
         {

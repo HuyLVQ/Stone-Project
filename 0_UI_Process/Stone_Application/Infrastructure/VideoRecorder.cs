@@ -34,6 +34,10 @@ public sealed class VideoRecorder : IDisposable
         public double PlaybackFramesPerSecond { get; set; }
         // Camera pixel format fed to the encoder (BGR8packed or for example BayerRG8). Readers may ignore it.
         public string SourcePixelFormat { get; set; }
+        // "ffmpeg-libx264-vfr" (frames carry their capture times) or "pylon-cfr" (fixed PlaybackFramesPerSecond).
+        public string VideoWriter { get; set; }
+        // True when playback timing follows CaptureOffsetsMicroseconds rather than PlaybackFramesPerSecond.
+        public bool TimestampedPlayback { get; set; }
         public string Error { get; set; }
     }
 
@@ -51,7 +55,8 @@ public sealed class VideoRecorder : IDisposable
     private Task m_worker;
     private long m_startTimestamp;
     private bool m_writerFaulted;
-    private VideoWriter m_videoWriter;
+    private IVideoSegmentWriter m_videoWriter;
+    private string m_ffmpegPath;
     private bool m_accepting;
     private long m_session;
     private string m_prefix, m_path;
@@ -72,7 +77,7 @@ public sealed class VideoRecorder : IDisposable
         m_segmentLimit = segmentLimit;
     }
 
-    // @brief: Initialize a recording session and start its dedicated Pylon writer worker
+    // @brief: Initialize a recording session and start its dedicated video writer worker
     // @param:
     //      * sessionToken: Immutable identity assigned to this recording session
     //      * playbackFramesPerSecond: Frame rate used to encode the session video
@@ -80,7 +85,9 @@ public sealed class VideoRecorder : IDisposable
     // @details:
     //      Creates a unique session directory and manifest, starts the writer, waits for its first segment
     //      to open, and only then accepts frames. A previous session must be fully finalized first.
-    //      Pylon converts each frame to the MP4's YUV420p format on the writer thread.
+    //      With FFmpeg available, each frame is encoded with its capture time (variable frame rate), so
+    //      playback matches real time even when frames are dropped. Otherwise the Pylon writer encodes at a
+    //      fixed playbackFramesPerSecond.
     public void StartSession(long sessionToken, double playbackFramesPerSecond, PixelType sourcePixelType)
     {
         lock (m_stopLock)
@@ -90,6 +97,13 @@ public sealed class VideoRecorder : IDisposable
             if (sourcePixelType == PixelType.Undefined)
                 throw new ArgumentException("The camera pixel format is unknown.", nameof(sourcePixelType));
             m_sourcePixelType = sourcePixelType;
+            // FFmpeg keeps real capture timing; Pylon's writer is the constant-rate fallback.
+            m_ffmpegPath = null;
+            if (FfmpegSegmentWriter.Supports(sourcePixelType) && FfmpegSegmentWriter.TryFindEncoder(out string ffmpegPath))
+                m_ffmpegPath = ffmpegPath;
+            else
+                Console.WriteLine("[WARN] [VIDEO] FFmpeg with libx264 was not found; recording at a fixed frame rate " +
+                    "with the Pylon writer. Playback speed is wrong whenever frames are dropped.");
             LastCompletedPath = null;
             LastRecording = null;
             string recordingName = "session_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "_" + Guid.NewGuid().ToString("N");
@@ -102,7 +116,9 @@ public sealed class VideoRecorder : IDisposable
                 {
                     SessionToken = sessionToken,
                     PlaybackFramesPerSecond = playbackFramesPerSecond,
-                    SourcePixelFormat = sourcePixelType.ToString()
+                    SourcePixelFormat = sourcePixelType.ToString(),
+                    VideoWriter = m_ffmpegPath != null ? "ffmpeg-libx264-vfr" : "pylon-cfr",
+                    TimestampedPlayback = m_ffmpegPath != null
                 };
                 m_session = sessionToken;
                 m_writerFaulted = false;
@@ -133,7 +149,7 @@ public sealed class VideoRecorder : IDisposable
         }
     }
 
-    // The capture thread only offers an owned frame. The worker does all Pylon I/O.
+    // The capture thread only offers an owned frame. The worker does all video file I/O.
     // @brief: Offer an owned camera frame to the active recording queue
     // @param:
     //      * sessionToken: Identity of the session that captured the frame
@@ -273,7 +289,7 @@ public sealed class VideoRecorder : IDisposable
     // @param:
     //      * started: Completion source signaled when the first video segment is ready or startup fails
     // @details:
-    //      The worker owns Pylon file I/O, releases each frame reference after processing, accounts for
+    //      The worker owns video file I/O, releases each frame reference after processing, accounts for
     //      failed or abandoned frames, and closes the writer on every exit path.
     private void RecordLoop(TaskCompletionSource<bool> started)
     {
@@ -290,7 +306,7 @@ public sealed class VideoRecorder : IDisposable
                     {
                         lock (m_lock) m_manifest.FailedFrames++;
                         if (m_videoWriter == null || !m_videoWriter.IsOpen) throw;
-                        Console.WriteLine("[WARN] [VIDEO] Pylon skipped a frame: " + ex.Message);
+                        Console.WriteLine("[WARN] [VIDEO] Video writer skipped a frame: " + ex.Message);
                     }
                 }
             }
@@ -318,7 +334,7 @@ public sealed class VideoRecorder : IDisposable
             try { CloseSegment(); }
             catch (Exception ex)
             {
-                m_manifest.Error = (m_manifest.Error ?? "") + " Pylon close failed: " + ex.Message;
+                m_manifest.Error = (m_manifest.Error ?? "") + " Video writer close failed: " + ex.Message;
             }
         }
     }
@@ -328,37 +344,24 @@ public sealed class VideoRecorder : IDisposable
     //      * frame: Frame buffer and capture offset to write
     private void WriteFrame(QueuedFrame frame)
     {
-        if (m_captureOffsets.Count > 0 && m_videoWriter.ImageDataBytesWritten >= m_segmentLimit)
+        if (m_captureOffsets.Count > 0 && m_videoWriter.BytesWritten >= m_segmentLimit)
         {
             FinalizeSegment();
             OpenSegment();
         }
 
-        // Use the grab's own pixel type; Pylon converts it to YUV420p before encoding.
-        m_videoWriter.Write(frame.Pixels.Buffer, frame.Pixels.PixelType,
-            Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, 0, ImageOrientation.TopDown);
+        m_videoWriter.Write(frame.Pixels, frame.CaptureOffsetMicroseconds);
         m_captureOffsets.Add(frame.CaptureOffsetMicroseconds);
     }
 
-    // @brief: Create and initialize the next Pylon MP4 segment
+    // @brief: Create and initialize the next MP4 segment with the session's writer backend
     private void OpenSegment()
     {
         m_path = m_prefix + "_part" + (m_manifest.Segments.Count + 1).ToString("D4") + ".mp4";
-        var writer = new VideoWriter();
-        try
-        {
-            if (!VideoWriter.IsSupported)
-                throw new NotSupportedException("The installed Pylon video writer libraries are unavailable.");
-            writer.Create(m_path, m_manifest.PlaybackFramesPerSecond, m_sourcePixelType,
-                Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT, Config.VIDEO_WRITER_QUALITY);
-            m_captureOffsets = new List<long>();
-            m_videoWriter = writer;
-        }
-        catch
-        {
-            writer.Dispose();
-            throw;
-        }
+        m_videoWriter = m_ffmpegPath != null
+            ? (IVideoSegmentWriter)new FfmpegSegmentWriter(m_ffmpegPath, m_path, m_sourcePixelType)
+            : new PylonSegmentWriter(m_path, m_manifest.PlaybackFramesPerSecond, m_sourcePixelType);
+        m_captureOffsets = new List<long>();
     }
 
     // @brief: Close the current segment and add its path, frame count, and timestamps to the manifest
@@ -368,7 +371,7 @@ public sealed class VideoRecorder : IDisposable
         if (m_captureOffsets.Count > 0)
         {
             if (new FileInfo(m_path).Length == 0)
-                throw new IOException("Pylon produced an empty video segment: " + m_path);
+                throw new IOException("The video writer produced an empty segment: " + m_path);
             m_manifest.Segments.Add(new Segment
             {
                 Path = m_path,
@@ -380,10 +383,10 @@ public sealed class VideoRecorder : IDisposable
             File.Delete(m_path);
     }
 
-    // @brief: Close and dispose the active Pylon video writer when one is open
+    // @brief: Close and dispose the active video writer when one is open
     private void CloseSegment()
     {
-        VideoWriter writer = m_videoWriter;
+        IVideoSegmentWriter writer = m_videoWriter;
         if (writer == null) return;
         m_videoWriter = null;
         try { writer.Close(); }

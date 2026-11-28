@@ -87,10 +87,22 @@ public static class Config
     public const int READ_OFFSET = IMAGE_BUFFER_SIZE;
     public const int OFFSET_IMAGE = 100;
 
+    // Camera acquisition is capped at this rate so the recorder can encode every frame. Uncapped Bayer8
+    // streams about 44 FPS, faster than the encoder sustained, and the extra frames were dropped.
+    public const double CAMERA_FRAME_RATE = 30.0;
+    // Pylon grab buffers and the LatestImages output queue; absorbs short capture-thread stalls.
+    public const int CAMERA_GRAB_BUFFER_COUNT = 20;
+    public const int CAMERA_GRAB_OUTPUT_QUEUE_SIZE = 15;
+
     public const int VIDEO_FRAME_RATE = 30; // Playback fallback when the camera cannot report its frame rate.
-    public const uint VIDEO_WRITER_QUALITY = 80;
+    public const uint VIDEO_WRITER_QUALITY = 80;   // Pylon fallback writer only
     public const long VIDEO_SEGMENT_MAX_BYTES = 1_800_000_000;
-    public const int VIDEO_QUEUE_CAPACITY = 8;
+    // About 2 s of frames at 30 FPS (RAW_FRAME_BYTE_COUNT each) to ride out encoder slowdowns.
+    public const int VIDEO_QUEUE_CAPACITY = 60;
+    // FFmpeg recording writer: libx264 settings and how long STOP waits for it to flush.
+    public const string VIDEO_FFMPEG_PRESET = "veryfast";
+    public const int VIDEO_FFMPEG_CRF = 20;
+    public const int VIDEO_FFMPEG_EXIT_TIMEOUT_MS = 60_000;
     public const int IPC_CAPTURE_QUEUE_CAPACITY = 2;
     public const int AI_STOP_TIMEOUT_MS = 15_000;
     public const int AI_EXIT_TIMEOUT_MS = 5_000;

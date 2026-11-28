@@ -92,7 +92,12 @@ namespace Stone_Application.CameraClass
 #pragma warning restore CS0162
                     instance.m_camera.Parameters[PLCamera.ExposureTime].SetValue(Config.EXPOSURE_TIME);
 
+                    LimitFrameRate(instance.m_camera);
+
                     instance.m_camera.Parameters[PLCamera.AcquisitionMode].SetValue(PLCamera.AcquisitionMode.Continuous);
+                    // MaxNumBuffer must be set before OutputQueueSize, which may not exceed it.
+                    instance.m_camera.Parameters[PLCameraInstance.MaxNumBuffer].TrySetValue(Config.CAMERA_GRAB_BUFFER_COUNT);
+                    instance.m_camera.Parameters[PLCameraInstance.OutputQueueSize].TrySetValue(Config.CAMERA_GRAB_OUTPUT_QUEUE_SIZE);
                     instance.m_camera.StreamGrabber.Start(GrabStrategy.LatestImages, GrabLoop.ProvidedByUser);
                     instance.m_camera.Parameters[PLCamera.AcquisitionStart].Execute();
                     if (!instance.IsConnected)
@@ -111,6 +116,29 @@ namespace Stone_Application.CameraClass
                     s_instance = null;
                     throw new InvalidOperationException("Could not initialize the Basler camera. Check that the camera is connected, powered, and available to the Pylon driver.", ex);
                 }
+            }
+        }
+
+        // @brief: Cap the camera's free-running acquisition rate at Config.CAMERA_FRAME_RATE
+        // @param:
+        //      * camera: Opened camera, before acquisition starts
+        // @details:
+        //      Newer models expose AcquisitionFrameRate, older GigE models AcquisitionFrameRateAbs. A camera
+        //      without either keeps running uncapped; that is logged, not fatal.
+        private static void LimitFrameRate(Camera camera)
+        {
+            try
+            {
+                var parameters = camera.Parameters;
+                bool limited = parameters[PLCamera.AcquisitionFrameRateEnable].TrySetValue(true) &&
+                    (parameters[PLCamera.AcquisitionFrameRate].TrySetValue(Config.CAMERA_FRAME_RATE, FloatValueCorrection.ClipToRange) ||
+                     parameters[PLCamera.AcquisitionFrameRateAbs].TrySetValue(Config.CAMERA_FRAME_RATE, FloatValueCorrection.ClipToRange));
+                if (!limited)
+                    Console.WriteLine("[WARN] [CAMERA] The camera does not support an acquisition frame rate limit.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[WARN] [CAMERA] Could not limit the acquisition frame rate: " + ex.Message);
             }
         }
 
