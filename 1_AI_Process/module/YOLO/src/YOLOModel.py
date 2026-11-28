@@ -21,7 +21,7 @@ class YOLOImpl():
         os.path.dirname(os.path.abspath(__file__)),
         "..", "..", "..", "..",
         "Weight_v2", "model", "YOLO",
-        "best260719.pt"
+        "best260807.pt"
     )
 
     m_weightsPath = os.path.abspath(m_weightsPath)
@@ -59,6 +59,7 @@ class YOLOImpl():
         if not p_images:
             return []
         return list(self.m_model(p_images,
+                                 conf=0.1,
                                  verbose=False,
                                  device=self.m_device))
     
@@ -274,13 +275,13 @@ class YOLOImpl():
                         
                         if widthInCM < 1 or lengthInCM < 1:
                             rockType = concernedRockType[0]
-                        elif (lengthInCM < 2 or widthInCM < 2) and lengthInCM >= 1 and widthInCM >= 1:
+                        elif (lengthInCM < 2.5 or widthInCM < 2.5) and lengthInCM >= 1 and widthInCM >= 1:
                             rockType = concernedRockType[1]
-                        elif (lengthInCM < 4 or widthInCM < 4) and lengthInCM >= 2 and widthInCM >= 2:
+                        elif (lengthInCM < 5 or widthInCM < 5) and lengthInCM >= 2.5 and widthInCM >= 2.5:
                             rockType = concernedRockType[2]
-                        elif 4 <= lengthInCM and 4 <= widthInCM:
+                        elif 5 <= lengthInCM and 5 <= widthInCM:
                             rockType = concernedRockType[3]
-                        else:
+                        else:   
                             rockType = concernedRockType[4]
                             
                         totalAreaByRockType[rockType] += cv2.contourArea(contour) * (areaScale)

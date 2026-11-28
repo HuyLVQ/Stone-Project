@@ -36,7 +36,7 @@ from ultralytics import YOLO
 ROOT_DIR = Path(__file__).resolve().parent.parent
 MODEL_DIR = ROOT_DIR / "model"
 DATA_DIR = ROOT_DIR / "data_csv"
-VIDEO_DIR = ROOT_DIR / "video4"
+VIDEO_DIR = ROOT_DIR / "video3"
 
 YOLO_MODEL_PATH = MODEL_DIR / "YOLO" / "best260807.pt"
 
@@ -45,9 +45,9 @@ YOLO_MODEL_PATH = MODEL_DIR / "YOLO" / "best260807.pt"
 # to match the existing project path; verify its training granularity.
 XGBOOST_MODEL_PATH = MODEL_DIR / "XGBoost" / "xgboost_v3.pkl"
 
-VIDEO_CUT_TIME = 0.88  # seconds
-PIXEL2CM_COUNT = 14.4
-PIXEL2CM_WEIGHT = 15.4
+VIDEO_CUT_TIME = 0.77 #0.84  # seconds
+PIXEL2CM_COUNT = 17.4
+PIXEL2CM_WEIGHT = 14.8
 YOLO_CONF_WEIGHT = 0.10
 
 SUPPORTED_VIDEO_FORMATS = {".avi", ".mp4", ".mov", ".mkv"}
@@ -213,8 +213,8 @@ def video_to_frame() -> Path:
 # ============================================================
 
 
-def classify_rock(length_cm: float, width_cm: float) -> Optional[str]:
-    """Classify a detected rock using its shorter physical side."""
+def _get_shorter_side_mm(length_cm: float, width_cm: float) -> Optional[float]:
+    """Return the shorter physical side in mm; reject invalid dimensions."""
     if (
         not np.isfinite(length_cm)
         or not np.isfinite(width_cm)
@@ -223,14 +223,48 @@ def classify_rock(length_cm: float, width_cm: float) -> Optional[str]:
     ):
         return None
 
-    shorter_side_mm = min(length_cm, width_cm) * 10.0
+    return min(length_cm, width_cm) * 10.0
+
+
+def classify_rock_for_weight(length_cm: float, width_cm: float) -> Optional[str]:
+    """Classify rocks for the mass-estimation feature pipeline.
+
+    Weight thresholds: <10 mm, <20 mm, <50 mm, and >=50 mm.
+    """
+    shorter_side_mm = _get_shorter_side_mm(length_cm, width_cm)
+    if shorter_side_mm is None:
+        return None
+
     if shorter_side_mm < 10:
         return "mi_sang"
     if shorter_side_mm < 20:
         return "1x2"
-    if shorter_side_mm < 40:
+    if shorter_side_mm < 50:
         return "2x4"
     return "4x6"
+
+
+def classify_rock_for_count(length_cm: float, width_cm: float) -> Optional[str]:
+    """Classify rocks for the counting/classification pipeline.
+
+    Classification thresholds: <10 mm, <25 mm, <50 mm, and >=50 mm.
+    """
+    shorter_side_mm = _get_shorter_side_mm(length_cm, width_cm)
+    if shorter_side_mm is None:
+        return None
+
+    if shorter_side_mm < 10:
+        return "mi_sang"
+    if shorter_side_mm < 25:
+        return "1x2"
+    if shorter_side_mm < 50:
+        return "2x4"
+    return "4x6"
+
+
+def classify_rock(length_cm: float, width_cm: float) -> Optional[str]:
+    """Backward-compatible alias; defaults to the weight classification rule."""
+    return classify_rock_for_weight(length_cm, width_cm)
 
 
 def get_contour_dimensions(contour: np.ndarray, pixel_per_cm: float):
@@ -326,7 +360,7 @@ def count_rocks() -> dict[str, int]:
                 dims = get_contour_dimensions(contour, PIXEL2CM_COUNT)
                 if dims is None:
                     continue
-                rock_type = classify_rock(*dims)
+                rock_type = classify_rock_for_count(*dims)
                 if rock_type in counts:
                     counts[rock_type] += 1
 
@@ -375,7 +409,7 @@ def create_csv() -> Path:
                 if dims is None:
                     continue
 
-                rock_type = classify_rock(*dims)
+                rock_type = classify_rock_for_weight(*dims)
                 if rock_type not in ROCK_TYPES:
                     continue
 
