@@ -25,7 +25,7 @@ public static class Config
     // limit it; keep it under about half the measured server-to-client throughput. Above ~12 Mbps
     // the 1 MB per-client send backlog absorbs less than 0.7 s of network stall before skipping
     // to the next keyframe.
-    public const int IOT_STREAM_BITRATE_KBPS = 6_000;
+    public const int IOT_STREAM_BITRATE_KBPS = 4_000;
     public const int IMAGE_WIDTH = 1_920;                           // Image width of the camera
     public const int IMAGE_HEIGHT = 1_200;                          // Image height of the camera
 

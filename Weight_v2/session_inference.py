@@ -144,8 +144,10 @@ def analyze_recording(recording, model=None, capture_factory=cv2.VideoCapture):
     sampled_expected = processed = skipped = 0
     frame_features = []
     known = True
-    capture_interval_us = max(1, round(pipeline.VIDEO_CUT_TIME * 1_000_000))
-    last_capture_bucket = -1
+    # Frame position on the session timeline, so split recordings sample like
+    # one continuous video in test.py.
+    timeline_start = 0
+    unopened = []
 
     def process_frame(frame_index, frame, path, segment_number):
         nonlocal processed, skipped
@@ -175,47 +177,37 @@ def analyze_recording(recording, model=None, capture_factory=cv2.VideoCapture):
             print("[WARN] Skipped sampled frame {} in {}: {}".format(frame_index, path, exc),
                   file=sys.stderr)
 
-    for segment_number, (path, physical_expected, offsets) in enumerate(segments, start=1):
-        sample_positions = None
-        if offsets is not None:
-            # Use the first recorded frame in each elapsed capture interval.
-            # Keep the same timeline across MP4 segment boundaries and gaps.
-            sample_positions = set()
-            for frame_index, offset in enumerate(offsets):
-                bucket = offset // capture_interval_us
-                if bucket > last_capture_bucket:
-                    sample_positions.add(frame_index)
-                    last_capture_bucket = bucket
-            sampled_expected += len(sample_positions)
-
+    for segment_number, (path, physical_expected, _offsets) in enumerate(segments, start=1):
         capture = capture_factory(str(path))
         if not capture.isOpened():
             capture.release()
             if physical_expected is None:
                 raise RuntimeError("Could not open recording: " + str(path))
-            if sample_positions is None:
-                known = False
-            else:
-                skipped += len(sample_positions)
+            # Without the segment's FPS its sample positions are unknown.
+            known = False
+            unopened.append(str(path))
+            print("[WARN] Could not open segment: {}".format(path), file=sys.stderr)
+            timeline_start += physical_expected
             continue
+        frame_index = 0
         try:
-            if sample_positions is None:
-                fps = capture.get(cv2.CAP_PROP_FPS)
-                if not math.isfinite(fps) or fps <= 0:
-                    raise ValueError("FPS is invalid for recording: {}".format(path))
-                interval = max(1, round(fps * pipeline.VIDEO_CUT_TIME))
-                if physical_expected is None:
-                    known = False
-                    reported = capture.get(cv2.CAP_PROP_FRAME_COUNT)
-                    physical_expected = int(reported) if math.isfinite(reported) and reported > 0 else None
-                if physical_expected is not None:
-                    sample_positions = range(0, physical_expected, interval)
-                    sampled_expected += len(sample_positions)
+            # Match test.py's video_to_frame(): one frame every
+            # round(fps * VIDEO_CUT_TIME) decoded frames.
+            fps = capture.get(cv2.CAP_PROP_FPS)
+            if not math.isfinite(fps) or fps <= 0:
+                raise ValueError("FPS is invalid for recording: {}".format(path))
+            interval = max(1, round(fps * pipeline.VIDEO_CUT_TIME))
+            if physical_expected is None:
+                known = False
+                reported = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+                physical_expected = int(reported) if math.isfinite(reported) and reported > 0 else None
+            if physical_expected is not None:
+                sampled_expected += sum(1 for i in range(physical_expected)
+                                        if (timeline_start + i) % interval == 0)
 
-            frame_index = consecutive_failures = 0
+            consecutive_failures = 0
             while physical_expected is None or frame_index < physical_expected:
-                should_sample = (frame_index in sample_positions if sample_positions is not None
-                                 else frame_index % interval == 0)
+                should_sample = (timeline_start + frame_index) % interval == 0
                 ok, frame = capture.read()
                 if not ok:
                     if physical_expected is None:
@@ -249,8 +241,12 @@ def analyze_recording(recording, model=None, capture_factory=cv2.VideoCapture):
                           file=sys.stderr)
         finally:
             capture.release()
+            timeline_start += physical_expected if physical_expected is not None else frame_index
 
     if processed == 0:
+        if unopened:
+            raise RuntimeError("No sampled frames could be processed; could not open segment(s): "
+                               + ", ".join(unopened))
         raise RuntimeError("No sampled frames could be processed")
     if trusted and known:
         # Account for sample positions after a damaged tail or failed seek.
