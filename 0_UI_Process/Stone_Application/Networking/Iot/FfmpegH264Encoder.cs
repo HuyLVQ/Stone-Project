@@ -23,9 +23,12 @@ namespace Stone_Application.Networking.Iot
                 {
                     FileName = executablePath,
                     Arguments = "-hide_banner -loglevel error -nostdin " +
-                        "-f rawvideo -pixel_format bgr24 -video_size 1920x1200 -framerate 5 -i pipe:0 " +
+                        "-f rawvideo -pixel_format bgr24 -video_size 1920x1200 -framerate " + Config.IOT_STREAM_FPS + " -i pipe:0 " +
                         "-an -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p " +
-                        "-b:v 2000k -maxrate 2000k -bufsize 4000k -g 10 -keyint_min 10 -sc_threshold 0 " +
+                        "-b:v " + Config.IOT_STREAM_BITRATE_KBPS + "k -maxrate " + Config.IOT_STREAM_BITRATE_KBPS + "k " +
+                        "-bufsize " + (2 * Config.IOT_STREAM_BITRATE_KBPS) + "k " +
+                        // One keyframe per second, so a client that joins or resyncs waits at most 1 s.
+                        "-g " + Config.IOT_STREAM_FPS + " -keyint_min " + Config.IOT_STREAM_FPS + " -sc_threshold 0 " +
                         "-x264-params aud=1:repeat-headers=1 -f mpegts -mpegts_flags +resend_headers " +
                         "-muxdelay 0 -muxpreload 0 -flush_packets 1 pipe:1",
                     UseShellExecute = false,

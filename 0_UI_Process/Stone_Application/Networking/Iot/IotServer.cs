@@ -32,7 +32,10 @@ namespace Stone_Application.Networking.Iot
         private long m_sessionToken;
         private long m_sequence;
         private long m_lastImagePublishTimestamp;
-        private static readonly long s_minimumImageIntervalTicks = Math.Max(1, Stopwatch.Frequency / 5);
+        // Frames arrive at about IOT_STREAM_FPS with some jitter. A full-period minimum would drop
+        // every frame that lands a few ms early, so allow 75% of the period between frames.
+        private static readonly long s_minimumImageIntervalTicks =
+            Math.Max(1, Stopwatch.Frequency * 3 / (4L * Config.IOT_STREAM_FPS));
         private string m_ffmpegPath;
         private FfmpegH264Encoder m_h264Encoder;
         private bool m_h264EncoderAttempted;

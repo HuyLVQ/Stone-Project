@@ -19,6 +19,13 @@ public static class Config
     public const int EXPOSURE_TIME = 5_000;
     public const int TIME_INTERVAL = 100;
     public const int IPC_CAPTURE_INTERVAL_MS = 100;
+    // Live IoT stream (H.264 and JPEG). The rate matches the 10 FPS inference cadence above.
+    public const int IOT_STREAM_FPS = 10;
+    // H.264 stream bitrate. The stream stays on the local network, so the internet uplink does not
+    // limit it; keep it under about half the measured server-to-client throughput. Above ~12 Mbps
+    // the 1 MB per-client send backlog absorbs less than 0.7 s of network stall before skipping
+    // to the next keyframe.
+    public const int IOT_STREAM_BITRATE_KBPS = 6_000;
     public const int IMAGE_WIDTH = 1_920;                           // Image width of the camera
     public const int IMAGE_HEIGHT = 1_200;                          // Image height of the camera
 

@@ -71,6 +71,10 @@ namespace Stone_Client.Video
         /// Low-latency demux and decode of MPEG-TS on stdin. Probing is kept short
         /// (about one keyframe) so the first picture appears quickly.
         ///
+        /// "-fflags nobuffer" must not be used: it discards the packets read while
+        /// probing, so the first keyframe is lost and nothing is shown until the
+        /// next one (a replay measured 1.3 s to the first frame with it, 0.3 s without).
+        ///
         /// "-fps_mode passthrough" emits each decoded frame exactly once. Raw video
         /// output otherwise defaults to constant frame rate, and when the server
         /// skips ahead to a later keyframe the timestamp jump would make FFmpeg
@@ -80,7 +84,7 @@ namespace Stone_Client.Video
         internal static string BuildArguments(int p_width, int p_height)
         {
             return "-hide_banner -loglevel error -nostdin " +
-                   "-fflags nobuffer -flags low_delay -probesize 262144 -analyzeduration 500000 " +
+                   "-flags low_delay -probesize 65536 -analyzeduration 200000 " +
                    "-f mpegts -i pipe:0 -map 0:v:0 -an " +
                    "-vf scale=" + p_width + ":" + p_height + " -fps_mode passthrough " +
                    "-pix_fmt bgr24 -f rawvideo pipe:1";
